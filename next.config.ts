@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // We removed the experimental cacheComponents line to fix the build
 };
 
 export default nextConfig;

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindAnimate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
@@ -11,6 +12,14 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Paper & Ink System
+        paper: "var(--paper)", 
+        ink: "var(--ink)",
+        pencil: "var(--pencil)",
+        highlight: "var(--highlight)",
+        gold: "var(--gold)",
+        
+        // Standard UI Colors
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -52,6 +61,10 @@ export default {
           "5": "hsl(var(--chart-5))",
         },
       },
+      fontFamily: {
+        english: ["var(--font-english)", "sans-serif"],
+        hebrew: ["var(--font-hebrew)", "serif"],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -59,5 +72,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindAnimate],
 } satisfies Config;

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import "./globals.css";
+import { TextSettingsProvider } from "@/components/text-settings-context";
+import "@/app/main.css";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -9,8 +10,8 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: "Torah Builder",
+  description: "A digital sanctuary for Jewish texts",
 };
 
 const geistSans = Geist({
@@ -33,7 +34,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          {/* Wrap children in the TextSettingsProvider so that 
+              InteractiveReader and TextViewOptions can access the context.
+          */}
+          <TextSettingsProvider>
+            {children}
+          </TextSettingsProvider>
         </ThemeProvider>
       </body>
     </html>

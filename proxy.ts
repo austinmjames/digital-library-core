@@ -1,6 +1,7 @@
 import { updateSession } from "@/lib/supabase/proxy";
 import { type NextRequest } from "next/server";
 
+// CHANGED FROM middleware TO proxy
 export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
@@ -8,13 +9,12 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * Feel free to modify this pattern to include more paths.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
-};
+}
