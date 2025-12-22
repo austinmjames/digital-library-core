@@ -1,8 +1,7 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { useTextSettings } from "@/components/text-settings-context";
 
 interface Verse {
   c2_index: number;
@@ -21,35 +20,6 @@ interface ChapterProps {
 }
 
 const Chapter = memo(({ verses, layoutMode, fontSize, book, chapterNum, toHebrewNumeral }: ChapterProps) => {
-  const { showFootnotes } = useTextSettings();
-
-  /**
-   * processContent
-   * Replaces raw <sup> markers with a clean icon and ensures 
-   * footnotes can be toggled via global settings.
-   */
-  const processContent = useMemo(() => (html: string) => {
-    if (!html) return "";
-    
-    if (!showFootnotes) {
-      return html.replace(/<sup[^>]*>(.*?)<\/sup>/gi, "");
-    }
-
-    const noteIcon = `
-      <span class="footnote-trigger-icon inline-flex items-center justify-center cursor-pointer mx-0.5 align-baseline opacity-40 hover:opacity-100 transition-opacity">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-        </svg>
-      </span>
-    `;
-
-    return html.replace(/<sup[^>]*>(.*?)<\/sup>/gi, (match) => {
-      // Keep the <sup> tag but replace its content with our icon
-      return match.replace(/>(.*?)</, `>${noteIcon}<`);
-    });
-  }, [showFootnotes]);
-
   return (
     <article 
       className="animate-in fade-in duration-700"
@@ -78,7 +48,7 @@ const Chapter = memo(({ verses, layoutMode, fontSize, book, chapterNum, toHebrew
                   {toHebrewNumeral(verse.c2_index)}
                 </span>
                 <div 
-                  dangerouslySetInnerHTML={{ __html: processContent(verse.he || "") }} 
+                  dangerouslySetInnerHTML={{ __html: verse.he || "" }}
                   className="inline" 
                 />
               </div>
@@ -98,7 +68,7 @@ const Chapter = memo(({ verses, layoutMode, fontSize, book, chapterNum, toHebrew
                 )}>
                   {verse.c2_index}
                 </span>
-                <div dangerouslySetInnerHTML={{ __html: processContent(verse.en || "") }} />
+                <div dangerouslySetInnerHTML={{ __html: verse.en || "" }} />
               </div>
             )}
           </div>

@@ -5,18 +5,31 @@
  */
 function processText(html: string | undefined): string {
   if (!html) return "";
-  const noSuperscript = html.replace(/<sup[^>]*>\*<\/sup>/g, "");
-  return noSuperscript.replace(
-    /<i class="footnote">(.*?)<\/i>/g, 
+
+  // 1. Standardize Sefaria's i-tag footnotes into a consistent wrapper
+  let processedHtml = html.replace(
+    /<i class="footnote">(.*?)<\/i>/g,
     (match, noteContent) => {
       const inlineNote = noteContent
         .replace(/<br\s*\/?>/gi, " ")
         .replace(/<\/?p[^>]*>/gi, " ")
         .replace(/\s+/g, " ")
         .trim();
-      return `<span class="sefaria-note-wrapper"><span class="sefaria-note-trigger">*</span><span class="sefaria-note-content">${inlineNote}</span></span>`;
+      return `<span class="footnote-container"><span class="footnote-trigger">*</span><span class="footnote-content">${inlineNote}</span></span>`;
     }
   );
+
+  // 2. Wrap superscript markers in a similar, interactive container
+  processedHtml = processedHtml.replace(
+    /<sup[^>]*>(.*?)<\/sup>/g,
+    (match, supContent) => {
+      // Avoid wrapping empty or placeholder sups
+      if (supContent.trim() === "" || supContent.trim() === "*") return "";
+      return `<span class="footnote-container"><span class="footnote-trigger">${supContent}</span></span>`;
+    }
+  );
+
+  return processedHtml;
 }
 
 export async function fetchNextChapter(ref: string) {

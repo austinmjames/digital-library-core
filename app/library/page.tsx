@@ -57,7 +57,7 @@ export default async function LibraryCatalog() {
             {categoryBooks.map((book) => (
               <Link
                 key={book.slug}
-                href={`/library/${book.slug}/1`}
+                href={`/reader?ref=${book.slug} 1`}
                 className="group relative p-6 bg-white border border-pencil/20 rounded-lg hover:border-gold hover:shadow-md transition-all flex flex-col justify-between h-32"
               >
                 <div className="flex justify-between items-start">

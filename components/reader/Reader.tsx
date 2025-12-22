@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef, useCallback, CSSProperties } from "react";
 import { fetchNextChapter } from "@/app/actions";
 import { cn } from "@/lib/utils";
-import Chapter from "./Chapter";
+import Chapter from "@/components/reader/Chapter";
 import { useTextSettings } from "@/components/text-settings-context";
-import { NavigationMenu } from "./NavigationMenu";
-import { ReaderHeader } from "./ReaderHeader";
+import { NavigationMenu } from "@/components/reader/NavigationMenu";
+import { ReaderHeader } from "@/components/reader/ReaderHeader";
 
 // Collections allowed to scroll between different books
 const CONTINUOUS_COLLECTIONS = ["tanakh", "torah", "prophets", "writings", "bible"];
@@ -78,11 +78,9 @@ interface ChapterData {
 
 interface InteractiveReaderProps {
   initialChapter: ChapterData;
-  bookSlug?: string;
 }
 
-export default function InteractiveReader({ initialChapter, bookSlug }: InteractiveReaderProps) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function InteractiveReader({ initialChapter }: InteractiveReaderProps) {
   const { language, layout, fontSize } = useTextSettings();
 
   const [chapters, setChapters] = useState<ChapterData[]>([initialChapter]);
@@ -323,7 +321,7 @@ export default function InteractiveReader({ initialChapter, bookSlug }: Interact
         window.scrollTo({ top: 0, behavior: "instant" });
       }
     }
-  }, [initialChapter, bookSlug]);
+  }, [initialChapter]);
 
   // --- SCROLL HANDLING ---
   useEffect(() => {
