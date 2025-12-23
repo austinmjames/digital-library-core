@@ -9,8 +9,7 @@ import Link from "next/link";
 
 /**
  * components/auth/sign-up-form.tsx
- * Standard auth form. Resolves the error where this file
- * incorrectly contained the InteractiveReader component.
+ * Path corrected to /login to avoid 404 from route group.
  */
 export default function SignUpForm() {
   const [email, setEmail] = useState("");
@@ -97,7 +96,7 @@ export default function SignUpForm() {
       <div className="text-center text-sm text-pencil">
         Already have an account?{" "}
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-gold font-medium hover:underline decoration-gold/30 underline-offset-4"
         >
           Sign in

@@ -7,23 +7,19 @@ import Chapter from "./Chapter";
 import { useTextSettings } from "@/components/context/text-settings-context";
 import { NavigationMenu } from "./NavigationMenu";
 import { ReaderHeader } from "./ReaderHeader";
+import { CommentaryPanel } from "./CommentaryPanel";
 import { ChapterData } from "@/lib/types/library";
 
 interface InteractiveReaderProps {
   initialChapter: ChapterData;
   bookSlug?: string;
-  activeTranslation?: string; // New Prop
+  activeTranslation?: string;
 }
 
-/**
- * components/reader/InteractiveReader.tsx
- * Infinite scroller for the TorahPro library.
- * Now respects the active translation when scrolling.
- */
 export default function InteractiveReader({
   initialChapter,
   bookSlug,
-  activeTranslation = "jps-1985", // Default
+  activeTranslation = "jps-1985",
 }: InteractiveReaderProps) {
   const { displayMode, fontSize } = useTextSettings();
 
@@ -46,6 +42,9 @@ export default function InteractiveReader({
     initialChapter?.chapterNum || 0
   );
   const [isNavOpen, setIsNavOpen] = useState(false);
+
+  // State for Commentary Panel
+  const [selectedVerseRef, setSelectedVerseRef] = useState<string | null>(null);
 
   const loaderRef = useRef<HTMLDivElement>(null);
   const prevLoaderRef = useRef<HTMLDivElement>(null);
@@ -71,7 +70,6 @@ export default function InteractiveReader({
 
     setIsLoadingPrev(true);
     try {
-      // Pass activeTranslation to ensure consistency
       const newChapter = await fetchNextChapter(targetRef, activeTranslation);
       if (newChapter) {
         if (!isCrossBookAllowed && newChapter.book !== firstChapter.book) {
@@ -117,7 +115,6 @@ export default function InteractiveReader({
 
     setIsLoading(true);
     try {
-      // Pass activeTranslation to ensure consistency
       const newChapter = await fetchNextChapter(
         lastChapter.nextRef,
         activeTranslation
@@ -151,6 +148,7 @@ export default function InteractiveReader({
       setActiveBook(initialChapter.book);
       setActiveChapter(initialChapter.chapterNum);
       window.scrollTo({ top: 0, behavior: "instant" });
+      setSelectedVerseRef(null);
     }
   }, [bookSlug, initialChapter]);
 
@@ -222,75 +220,121 @@ export default function InteractiveReader({
       : "Previous Chapter Available";
   };
 
+  const handleVerseClick = (verseId: string) => {
+    if (selectedVerseRef === verseId) {
+      setSelectedVerseRef(null);
+    } else {
+      setSelectedVerseRef(verseId);
+    }
+  };
+
+  // Determine slide class
+  const slideClass = selectedVerseRef ? "md:mr-[400px] lg:mr-[450px]" : "";
+
   return (
-    <div className="min-h-screen pb-32 bg-paper transition-colors duration-500">
+    <div className="min-h-screen bg-paper transition-colors duration-500 overflow-x-hidden relative">
       <NavigationMenu
         isOpen={isNavOpen}
         onClose={() => setIsNavOpen(false)}
         currentBook={activeBook}
       />
-      <ReaderHeader
-        activeBook={activeBook}
-        activeChapter={activeChapter}
-        onOpenNav={() => setIsNavOpen(true)}
+
+      <CommentaryPanel
+        verseRef={selectedVerseRef}
+        onClose={() => setSelectedVerseRef(null)}
       />
 
+      {/* Sticky/Fixed Header Container 
+        Applies the same slide/squeeze class as the main content
+      */}
+      <div
+        className={cn(
+          "fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-spring",
+          slideClass
+        )}
+      >
+        <ReaderHeader
+          activeBook={activeBook}
+          activeChapter={activeChapter}
+          onOpenNav={() => setIsNavOpen(true)}
+        />
+      </div>
+
+      {/* Main Content Wrapper 
+        Added 'pt-14' (3.5rem) to push content down below the fixed header.
+      */}
       <main
         className={cn(
-          "mx-auto mt-6 px-4 md:px-12 transition-all duration-500",
-          displayMode === "bilingual-parallel" ? "max-w-[1600px]" : "max-w-4xl"
+          "transition-all duration-300 ease-spring pt-14",
+          slideClass
         )}
-        style={{ fontSize: `${fontSize}pt` } as CSSProperties}
       >
         <div
-          ref={prevLoaderRef}
           className={cn(
-            "flex flex-col items-center justify-center transition-all duration-500",
-            hasPrev ? "h-32 opacity-100 mb-8" : "h-0 opacity-0 overflow-hidden"
+            "mx-auto mt-6 px-4 md:px-12 pb-32",
+            displayMode === "bilingual-parallel"
+              ? "max-w-[1600px]"
+              : "max-w-4xl"
           )}
+          style={{ fontSize: `${fontSize}pt` } as CSSProperties}
         >
-          {hasPrev && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-[10px] text-pencil/40 uppercase tracking-[0.2em] font-medium text-center">
-                {getPrevLabel()}
-              </div>
-              {isLoadingPrev && (
-                <div className="w-5 h-5 border-2 border-pencil/20 border-t-gold rounded-full animate-spin" />
-              )}
-            </div>
-          )}
-        </div>
-
-        {chapters.map((chapterData) => (
           <div
-            key={chapterData.id}
-            id={getChapterId(chapterData.id)}
-            data-book={chapterData.book}
-            data-chapter={chapterData.chapterNum}
-            ref={(el) => {
-              if (el) chapterRefs.current.set(chapterData.id, el);
-            }}
-            className="mb-24 scroll-mt-24"
+            ref={prevLoaderRef}
+            className={cn(
+              "flex flex-col items-center justify-center transition-all duration-500",
+              hasPrev
+                ? "h-32 opacity-100 mb-8"
+                : "h-0 opacity-0 overflow-hidden"
+            )}
           >
-            <div className="py-12 text-center select-none">
-              <h2 className="text-4xl md:text-5xl font-serif text-ink tracking-tight leading-none">
-                <span className="block text-sm md:text-base font-sans font-bold uppercase tracking-[0.2em] text-pencil/60 mb-3">
-                  {chapterData.book}
-                </span>
-                {chapterData.chapterNum}
-              </h2>
-            </div>
-            <Chapter
-              verses={chapterData.verses}
-              chapterNum={chapterData.chapterNum}
-            />
+            {hasPrev && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-[10px] text-pencil/40 uppercase tracking-[0.2em] font-medium text-center">
+                  {getPrevLabel()}
+                </div>
+                {isLoadingPrev && (
+                  <div className="w-5 h-5 border-2 border-pencil/20 border-t-gold rounded-full animate-spin" />
+                )}
+              </div>
+            )}
           </div>
-        ))}
 
-        <div ref={loaderRef} className="h-48 flex items-center justify-center">
-          {isLoading && (
-            <div className="w-6 h-6 border-2 border-pencil/30 border-t-gold rounded-full animate-spin" />
-          )}
+          {chapters.map((chapterData) => (
+            <div
+              key={chapterData.id}
+              id={getChapterId(chapterData.id)}
+              data-book={chapterData.book}
+              data-chapter={chapterData.chapterNum}
+              ref={(el) => {
+                if (el) chapterRefs.current.set(chapterData.id, el);
+              }}
+              className="mb-24 scroll-mt-24"
+            >
+              <div className="py-12 text-center select-none">
+                <h2 className="text-4xl md:text-5xl font-serif text-ink tracking-tight leading-none">
+                  <span className="block text-sm md:text-base font-sans font-bold uppercase tracking-[0.2em] text-pencil/60 mb-3">
+                    {chapterData.book}
+                  </span>
+                  {chapterData.chapterNum}
+                </h2>
+              </div>
+              <Chapter
+                verses={chapterData.verses}
+                chapterNum={chapterData.chapterNum}
+                selectedVerseId={selectedVerseRef}
+                onVerseClick={handleVerseClick}
+              />
+            </div>
+          ))}
+
+          <div
+            ref={loaderRef}
+            className="h-48 flex items-center justify-center"
+          >
+            {isLoading && (
+              <div className="w-6 h-6 border-2 border-pencil/30 border-t-gold rounded-full animate-spin" />
+            )}
+          </div>
         </div>
       </main>
     </div>

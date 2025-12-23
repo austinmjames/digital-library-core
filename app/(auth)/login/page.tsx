@@ -1,5 +1,9 @@
-import { LoginForm } from "@/components/auth/login-form";
+import LoginForm from "@/components/auth/login-form";
 
+/**
+ * app/(auth)/login/page.tsx
+ * Uses the default import for LoginForm to resolve the exported member error.
+ */
 export default function LoginPage() {
   return (
     <div className="space-y-6">

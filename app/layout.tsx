@@ -2,15 +2,8 @@ import type { Metadata } from "next";
 import { Frank_Ruhl_Libre, Libre_Franklin } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TextSettingsProvider } from "@/components/context/text-settings-context";
+import { AuthProvider } from "@/components/context/auth-context";
 import "./globals.css";
-
-/**
- * app/layout.tsx
- * The architectural foundation of TorahPro.
- * Wrapping the children in TextSettingsProvider at the root ensures
- * that preferences (Display Mode, Font Size) are retained as the
- * user navigates between different books and chapters.
- */
 
 const frankRuhl = Frank_Ruhl_Libre({
   subsets: ["hebrew", "latin"],
@@ -45,11 +38,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* The TextSettingsProvider is placed here so it persists 
-            throughout the entire session. By wrapping the children, 
-            Next.js preserves the state during client-side transitions.
-          */}
-          <TextSettingsProvider>{children}</TextSettingsProvider>
+          <AuthProvider>
+            <TextSettingsProvider>{children}</TextSettingsProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
