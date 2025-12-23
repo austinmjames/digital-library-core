@@ -1,182 +1,182 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { LIBRARY, Collection, Category, Book } from "@/lib/books";
+import { useState } from "react";
+import { LIBRARY, NavCollection, NavCategory, NavBook } from "@/lib/books";
 import { cn } from "@/lib/utils";
+import { ChevronRight, ArrowLeft, X } from "lucide-react";
 
 interface NavigationMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (ref: string) => void;
   currentBook: string;
 }
 
-// Define the possible "Levels" of our drill-down menu
 type MenuLevel = "COLLECTIONS" | "CATEGORIES" | "BOOKS" | "CHAPTERS";
 
-export function NavigationMenu({ isOpen, onClose, onSelect, currentBook }: NavigationMenuProps) {
-  // Navigation State
+interface SelectedContext {
+  collection?: NavCollection;
+  category?: NavCategory;
+  book?: NavBook;
+}
+
+/**
+ * components/reader/NavigationMenu.tsx
+ * Premium drill-down navigation for the TorahPro library.
+ * Resolves: Implicit 'any' type errors by explicitly typing map parameters.
+ */
+export function NavigationMenu({
+  isOpen,
+  onClose,
+  currentBook,
+}: NavigationMenuProps) {
   const [level, setLevel] = useState<MenuLevel>("COLLECTIONS");
-  
-  // Selection Path
-  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [context, setContext] = useState<SelectedContext>({});
 
-  // Reset menu when opening
-  useEffect(() => {
-    if (isOpen) {
-      // Optional: If you want to start fresh every time, uncomment below:
-      // setLevel("COLLECTIONS");
-      // setSelectedCollection(null);
-      // ...
-    }
-  }, [isOpen]);
-
-  // Back Button Logic
   const handleBack = () => {
-    if (level === "CHAPTERS") {
-      setLevel("BOOKS");
-      setSelectedBook(null);
-    } else if (level === "BOOKS") {
-      setLevel("CATEGORIES");
-      setSelectedCategory(null);
-    } else if (level === "CATEGORIES") {
-      setLevel("COLLECTIONS");
-      setSelectedCollection(null);
-    } else {
-      onClose(); // Close if we are at the top level
+    switch (level) {
+      case "CHAPTERS":
+        setLevel("BOOKS");
+        break;
+      case "BOOKS":
+        setLevel("CATEGORIES");
+        break;
+      case "CATEGORIES":
+        setLevel("COLLECTIONS");
+        break;
+      default:
+        onClose();
     }
   };
 
-  // Header Title Logic
   const getTitle = () => {
     if (level === "COLLECTIONS") return "Library";
-    if (level === "CATEGORIES") return selectedCollection?.name;
-    if (level === "BOOKS") return selectedCategory?.name;
-    if (level === "CHAPTERS") return selectedBook?.name;
+    if (level === "CATEGORIES") return context.collection?.name;
+    if (level === "BOOKS") return context.category?.name;
+    return context.book?.name;
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 animate-in fade-in duration-200">
-      
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-paper/80 backdrop-blur-sm" 
+      <div
+        className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
       />
 
-      {/* Modal Card */}
-      <div className="relative w-full max-w-md h-[60vh] md:h-[500px] bg-white shadow-2xl rounded-2xl border border-black/5 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-        
-        {/* HEADER: Back Button + Title */}
-        <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between bg-white/95 backdrop-blur z-10">
-          <div className="flex items-center gap-2">
+      {/* Navigation Card */}
+      <div className="relative w-full max-w-md h-[65vh] bg-paper shadow-2xl rounded-2xl border border-pencil/10 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+        {/* Header */}
+        <div className="h-14 border-b border-pencil/10 flex items-center justify-between px-4 bg-paper/80 backdrop-blur shrink-0">
+          <div className="flex items-center gap-3">
             {level !== "COLLECTIONS" && (
-              <button 
+              <button
                 onClick={handleBack}
-                className="w-8 h-8 flex items-center justify-center rounded-full text-pencil hover:bg-black/5 hover:text-ink transition-colors"
+                className="p-1 rounded-full hover:bg-black/5 transition-colors"
               >
-                ←
+                <ArrowLeft className="w-4 h-4 text-pencil" />
               </button>
             )}
-            <h2 className="text-base font-bold text-ink tracking-tight">
+            <h2 className="font-serif font-bold text-ink text-lg tracking-tight">
               {getTitle()}
             </h2>
           </div>
-          
-          <button 
+          <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-black/5 text-ink/50 hover:bg-black/10 transition-colors"
+            className="p-1 rounded-full hover:bg-black/5 transition-colors"
           >
-            <span className="text-xl leading-none">&times;</span>
+            <X className="w-5 h-5 text-pencil" />
           </button>
         </div>
 
-        {/* CONTENT AREA */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 bg-[#F9F9F9]">
-          
-          {/* LEVEL 1: COLLECTIONS (Tanakh, etc.) */}
+        {/* Scrollable List Area */}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-2">
+          {/* LEVEL 1: Collections */}
           {level === "COLLECTIONS" && (
-            <div className="grid grid-cols-1 gap-3">
-              {LIBRARY.map((col) => (
+            <div className="space-y-1">
+              {LIBRARY.map((col: NavCollection) => (
                 <button
                   key={col.name}
                   onClick={() => {
-                    setSelectedCollection(col);
+                    setContext({ collection: col });
                     setLevel("CATEGORIES");
                   }}
-                  className="p-6 bg-white border border-black/5 rounded-xl shadow-sm hover:shadow-md hover:border-black/10 transition-all text-left group"
+                  className="w-full p-4 rounded-xl bg-white border border-pencil/5 hover:border-gold/30 hover:shadow-sm transition-all text-left group flex items-center justify-between"
                 >
-                  <span className="text-lg font-bold text-ink group-hover:text-charcoal">{col.name}</span>
-                  <div className="text-xs text-pencil mt-1 uppercase tracking-wider">
-                    {col.categories.length} Sections
-                  </div>
+                  <span className="font-serif font-bold text-lg text-ink group-hover:text-gold transition-colors">
+                    {col.name}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-pencil/30 group-hover:translate-x-1 transition-transform" />
                 </button>
               ))}
             </div>
           )}
 
-          {/* LEVEL 2: CATEGORIES (Torah, Prophets...) */}
-          {level === "CATEGORIES" && selectedCollection && (
-            <div className="grid grid-cols-1 gap-3">
-              {selectedCollection.categories.map((cat) => (
+          {/* LEVEL 2: Categories */}
+          {level === "CATEGORIES" && context.collection && (
+            <div className="space-y-1">
+              {context.collection.categories.map((cat: NavCategory) => (
                 <button
                   key={cat.name}
                   onClick={() => {
-                    setSelectedCategory(cat);
+                    setContext({ ...context, category: cat });
                     setLevel("BOOKS");
                   }}
-                  className="p-5 bg-white border border-black/5 rounded-xl shadow-sm hover:shadow-md hover:border-black/10 transition-all text-left flex items-center justify-between group"
+                  className="w-full p-4 rounded-xl bg-white border border-pencil/5 hover:border-gold/30 hover:shadow-sm transition-all text-left flex items-center justify-between group"
                 >
-                  <span className="font-semibold text-ink">{cat.name}</span>
-                  <span className="text-pencil/40 group-hover:translate-x-1 transition-transform">→</span>
+                  <span className="font-sans font-medium text-ink group-hover:text-gold transition-colors">
+                    {cat.name}
+                  </span>
+                  <span className="text-xs text-pencil uppercase tracking-wider bg-black/5 px-2 py-1 rounded">
+                    {cat.books.length} Books
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
-          {/* LEVEL 3: BOOKS (Genesis, Exodus...) */}
-          {level === "BOOKS" && selectedCategory && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {selectedCategory.books.map((book) => (
+          {/* LEVEL 3: Books */}
+          {level === "BOOKS" && context.category && (
+            <div className="grid grid-cols-2 gap-2">
+              {context.category.books.map((book: NavBook) => (
                 <button
                   key={book.name}
                   onClick={() => {
-                    setSelectedBook(book);
+                    setContext({ ...context, book: book });
                     setLevel("CHAPTERS");
                   }}
                   className={cn(
-                    "p-4 bg-white border border-black/5 rounded-xl shadow-sm hover:shadow-md hover:border-black/10 transition-all text-center flex flex-col items-center justify-center gap-2 h-24",
-                    currentBook === book.name && "ring-2 ring-ink ring-offset-2"
+                    "p-4 rounded-xl border border-pencil/5 hover:border-gold/30 hover:shadow-sm transition-all text-center flex flex-col items-center justify-center gap-1 min-h-[5rem]",
+                    book.name === currentBook
+                      ? "bg-gold text-white shadow-md border-transparent"
+                      : "bg-white text-ink hover:text-gold"
                   )}
                 >
-                  <span className="text-sm font-medium text-ink leading-tight">{book.name}</span>
+                  <span className="font-serif font-medium leading-tight">
+                    {book.name}
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
-          {/* LEVEL 4: CHAPTERS (1, 2, 3...) */}
-          {level === "CHAPTERS" && selectedBook && (
+          {/* LEVEL 4: Chapters */}
+          {level === "CHAPTERS" && context.book && (
             <div className="grid grid-cols-5 gap-2">
-              {Array.from({ length: selectedBook.chapters }).map((_, i) => (
-                <button
+              {Array.from({ length: context.book.chapters }).map((_, i) => (
+                <a
                   key={i}
-                  onClick={() => {
-                    onSelect(`${selectedBook.name} ${i + 1}`);
-                    onClose();
-                  }}
-                  className="aspect-square flex items-center justify-center rounded-lg bg-white border border-black/5 text-sm font-mono text-ink hover:bg-ink hover:text-white transition-all shadow-sm active:scale-95"
+                  href={`/library/${context.collection?.name.toLowerCase()}/${context.book?.name
+                    .toLowerCase()
+                    .replace(/\s+/g, "-")}/${i + 1}`}
+                  className="aspect-square flex items-center justify-center rounded-lg border border-pencil/10 bg-white text-ink font-mono text-sm hover:bg-ink hover:text-paper hover:border-transparent transition-all"
                 >
                   {i + 1}
-                </button>
+                </a>
               ))}
             </div>
           )}
-
         </div>
       </div>
     </div>

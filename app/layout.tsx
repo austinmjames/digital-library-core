@@ -1,45 +1,55 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Frank_Ruhl_Libre, Libre_Franklin } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { TextSettingsProvider } from "@/components/text-settings-context";
-import "@/app/main.css";
+import { TextSettingsProvider } from "@/components/context/text-settings-context";
+import "./globals.css";
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
+/**
+ * app/layout.tsx
+ * The architectural foundation of TorahPro.
+ * Wrapping the children in TextSettingsProvider at the root ensures
+ * that preferences (Display Mode, Font Size) are retained as the
+ * user navigates between different books and chapters.
+ */
+
+const frankRuhl = Frank_Ruhl_Libre({
+  subsets: ["hebrew", "latin"],
+  variable: "--font-frank-ruhl",
+  display: "swap",
+});
+
+const libreFranklin = Libre_Franklin({
+  subsets: ["latin"],
+  variable: "--font-libre-franklin",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
-  title: "Torah Builder",
-  description: "A digital sanctuary for Jewish texts",
+  title: "TorahPro",
+  description: "A collaborative digital sanctuary for Jewish texts.",
 };
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  display: "swap",
-  subsets: ["latin"],
-});
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.className} antialiased`}>
+      <body
+        className={`${frankRuhl.variable} ${libreFranklin.variable} font-english antialiased bg-paper transition-colors duration-300`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          {/* Wrap children in the TextSettingsProvider so that 
-              InteractiveReader and TextViewOptions can access the context.
+          {/* The TextSettingsProvider is placed here so it persists 
+            throughout the entire session. By wrapping the children, 
+            Next.js preserves the state during client-side transitions.
           */}
-          <TextSettingsProvider>
-            {children}
-          </TextSettingsProvider>
+          <TextSettingsProvider>{children}</TextSettingsProvider>
         </ThemeProvider>
       </body>
     </html>

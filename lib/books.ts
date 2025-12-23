@@ -1,8 +1,26 @@
-export type Book = { name: string; chapters: number };
-export type Category = { name: string; books: Book[] };
-export type Collection = { name: string; categories: Category[] };
+/**
+ * lib/books.ts
+ * Static definition of the library structure for navigation.
+ * Resolves: "File '.../lib/books.ts' is not a module."
+ */
 
-export const LIBRARY: Collection[] = [
+export interface NavBook {
+  name: string;
+  chapters: number;
+  slug?: string;
+}
+
+export interface NavCategory {
+  name: string;
+  books: NavBook[];
+}
+
+export interface NavCollection {
+  name: string;
+  categories: NavCategory[];
+}
+
+export const LIBRARY: NavCollection[] = [
   {
     name: "Tanakh",
     categories: [
@@ -14,10 +32,10 @@ export const LIBRARY: Collection[] = [
           { name: "Leviticus", chapters: 27 },
           { name: "Numbers", chapters: 36 },
           { name: "Deuteronomy", chapters: 34 },
-        ]
+        ],
       },
       {
-        name: "Prophets (Nevi'im)",
+        name: "Prophets",
         books: [
           { name: "Joshua", chapters: 24 },
           { name: "Judges", chapters: 21 },
@@ -40,10 +58,10 @@ export const LIBRARY: Collection[] = [
           { name: "Haggai", chapters: 2 },
           { name: "Zechariah", chapters: 14 },
           { name: "Malachi", chapters: 3 },
-        ]
+        ],
       },
       {
-        name: "Writings (Ketuvim)", // <--- FIXED: Added closing quote and comma
+        name: "Writings",
         books: [
           { name: "Psalms", chapters: 150 },
           { name: "Proverbs", chapters: 31 },
@@ -58,11 +76,29 @@ export const LIBRARY: Collection[] = [
           { name: "Nehemiah", chapters: 13 },
           { name: "I Chronicles", chapters: 29 },
           { name: "II Chronicles", chapters: 36 },
-        ]
-      }
-    ]
+        ],
+      },
+    ],
   },
-  // Future expansions:
-  // { name: "Talmud", categories: [...] },
-  // { name: "Kabbalah", categories: [...] }
+  {
+    name: "Mishnah",
+    categories: [
+      {
+        name: "Seder Zeraim",
+        books: [
+          { name: "Berakhot", chapters: 9 },
+          { name: "Peah", chapters: 8 },
+          { name: "Demai", chapters: 7 },
+          { name: "Kilayim", chapters: 9 },
+          { name: "Sheviit", chapters: 10 },
+          { name: "Terumot", chapters: 11 },
+          { name: "Maasrot", chapters: 5 },
+          { name: "Maaser Sheni", chapters: 5 },
+          { name: "Challah", chapters: 4 },
+          { name: "Orlah", chapters: 3 },
+          { name: "Bikkurim", chapters: 3 },
+        ],
+      },
+    ],
+  },
 ];

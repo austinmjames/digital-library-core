@@ -1,0 +1,26 @@
+[
+  {
+    "book_slug": "genesis",
+    "chapter_num": 1,
+    "verse_num": 1,
+    "hebrew_text": "בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ",
+    "english_text": "In the beginning God created the heaven and the earth.",
+    "translation_id": "jps-1985"
+  },
+  {
+    "book_slug": "genesis",
+    "chapter_num": 1,
+    "verse_num": 2,
+    "hebrew_text": "וְהָאָרֶץ הָיְתָה תֹהוּ וָבֹהוּ וְחֹשֶׁךְ עַל־פְּנֵי תְהוֹם וְרוּחַ אֱלֹהִים מְרַחֶפֶת עַל־פְּנֵי הַמָּיִם",
+    "english_text": "Now the earth was unformed and void, and darkness was upon the face of the deep; and the spirit of God hovered over the face of the waters.",
+    "translation_id": "jps-1985"
+  },
+  {
+    "book_slug": "genesis",
+    "chapter_num": 1,
+    "verse_num": 3,
+    "hebrew_text": "וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי־אוֹר",
+    "english_text": "And God said: 'Let there be light.' And there was light.",
+    "translation_id": "jps-1985"
+  }
+]

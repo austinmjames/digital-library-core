@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* --- The Paper & Ink Palette (Light Mode) --- */
+    --paper: #f9f9f7; /* Warm, heavy cream paper */
+    --ink: #111111; /* Near black, softer than #000 */
+    --pencil: #737373; /* Neutral grey for metadata */
+    --charcoal: #404040; /* Dark grey for secondary text */
+    --gold: #d97706; /* Accent color */
+    --highlight: #fef3c7; /* For selected verses */
+
+    /* --- Shadcn UI Mappings to Paper System --- */
+    --background: 60 5% 96%; /* Matches --paper #F9F9F7 */
+    --foreground: 0 0% 7%; /* Matches --ink #111111 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45.1%;
+
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* --- The Paper & Ink Palette (Dark Mode - "Slate & Chalk") --- */
+    --paper: #0c0c0c;
+    --ink: #ededed;
+    --pencil: #a1a1aa;
+    --charcoal: #d4d4d8;
+    --gold: #f59e0b;
+    --highlight: #27272a;
+
+    --background: 0 0% 5%; /* Matches --paper #0c0c0c */
+    --foreground: 0 0% 93%; /* Matches --ink #EDEDED */
+
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 93%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 93%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: var(--paper); /* Enforce Paper var */
+    color: var(--ink); /* Enforce Ink var */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .hebrew-text {
+    font-family: var(--font-frank-ruhl), serif;
+    direction: rtl;
+    line-height: 1.6;
+  }
+
+  .english-text {
+    font-family: var(--font-libre-franklin), sans-serif;
+  }
+
+  /* iOS-like Scrollbar Hiding */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* --- Inline Footnote Styles --- */
+.sefaria-note-wrapper {
+  display: inline;
+  position: relative;
+}
+
+.sefaria-note-trigger {
+  cursor: pointer;
+  color: var(--pencil);
+  font-size: 0.75em;
+  font-weight: bold;
+  vertical-align: super;
+  margin: 0 2px;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.sefaria-note-trigger:hover {
+  color: var(--gold);
+}
+
+.sefaria-note-content {
+  display: none; /* Hidden by default */
+}
