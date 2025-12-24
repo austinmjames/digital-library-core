@@ -4,10 +4,11 @@
  */
 
 export interface Verse {
-  id: string;
-  c2_index: number;
-  he: string;
-  en: string;
+  id: string; // e.g., "Genesis 1:1"
+  c2_index: number; // e.g., 1
+  he: string; // Hebrew HTML
+  en: string; // English HTML
+  parashaStart?: string; // Title of the Parashah if it starts at this verse
 }
 
 export interface ChapterData {
@@ -19,75 +20,64 @@ export interface ChapterData {
   verses: Verse[];
   nextRef?: string;
   prevRef?: string;
+  activeTranslation?: string;
 }
 
-export interface BookMetadata {
-  slug: string;
-  title_en: string;
-  title_he: string | null;
-  categories: string[];
-  order_id: number;
-}
-
-export interface Commentary {
+export interface LibraryMarker {
   id: string;
-  verse_ref: string;
-  author_en: string;
-  author_he: string;
-  text_en: string;
-  text_he: string;
-  source_ref: string;
+  book_slug: string;
+  c1_index: number;
+  c2_index: number;
+  label: string;
+  type: "parasha" | "aliyah" | "daf" | "haftarah" | "custom";
+  user_id?: string;
 }
 
-export interface UserCommentary {
+export interface UserSchedule {
   id: string;
   user_id: string;
-  user_email?: string; // Hidden in UI, used for logic
-  user_name?: string; // Name snapshot for attribution
-  verse_ref: string;
-  book_slug: string;
-  chapter_num: number;
-  verse_num: number;
-  content: string;
-  collection_name: string;
+  title: string;
+  description?: string;
+  is_public: boolean;
+  schedule_type: "calendar" | "sequence";
   created_at: string;
-  updated_at?: string;
+  items?: ScheduleItem[];
 }
 
-// --- Commentary Sharing & Management Types ---
-
-export type PermissionLevel = "owner" | "collaborator" | "viewer";
-
-export interface CollaboratorInfo {
-  email: string;
-  permission: PermissionLevel;
-  name?: string;
+export interface ScheduleItem {
+  id: string;
+  schedule_id: string;
+  day_number?: number;
+  target_date?: string;
+  marker_id: string;
+  is_completed: boolean;
+  marker?: LibraryMarker;
 }
 
-export interface CollectionMetadata {
-  name: string;
-  owner_id: string;
-  permission: PermissionLevel;
-  owner_name?: string;
-  is_collaborative?: boolean;
-  share_code?: string;
-  collaborators?: CollaboratorInfo[];
+export interface AuthorMetadata {
+  id?: string;
+  author_name: string;
+  era?: string;
+  died?: string;
+  description_en?: string;
+  description_he?: string;
 }
 
-/**
- * Unified type for import handlers to ensure consistency
- * between parents and children.
- */
-export type ImportAction = (code: string) => Promise<boolean>;
-
-// --- Group Discussion Types ---
+export interface UserTranslation {
+  id?: string;
+  version_id: string;
+  book_slug: string;
+  c1: number;
+  c2: number;
+  custom_content: string;
+  user_id: string;
+}
 
 export interface DiscussionGroup {
   id: string;
   name: string;
   invite_code: string;
   created_by: string;
-  member_count?: number;
 }
 
 export interface DiscussionMessage {
@@ -99,3 +89,40 @@ export interface DiscussionMessage {
   content: string;
   created_at: string;
 }
+
+export interface CollectionMetadata {
+  id: string;
+  name: string;
+  owner_id: string;
+  permission: "owner" | "collaborator" | "viewer";
+  is_collaborative: boolean;
+  share_code?: string;
+  is_in_library: boolean;
+  metadata?: AuthorMetadata;
+  collaborators?: { email: string }[];
+}
+
+export interface Commentary {
+  id: string;
+  author_en: string;
+  author_he: string;
+  text_en?: string;
+  text_he?: string;
+  verse_ref: string;
+  source_ref: string;
+}
+
+export interface UserCommentary {
+  id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  collection_name: string;
+  collection_id?: string | null;
+  verse_ref: string;
+  created_at: string;
+}
+
+export type CommentaryGroup = "Personal" | "Classic" | "Community";
+export type ImportAction = (code: string) => Promise<boolean>;
+export type PermissionLevel = "owner" | "collaborator" | "viewer";

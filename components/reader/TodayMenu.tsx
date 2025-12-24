@@ -1,15 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  X,
-  Calendar,
-  BookOpen,
-  ChevronRight,
-  Sun,
-  Moon,
-  MapPin,
-} from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { X, Calendar, Loader2, Library, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   fetchDailyLearning,
@@ -17,36 +10,104 @@ import {
   DailySchedule,
   UpcomingInfo,
 } from "@/lib/hebcal";
+import {
+  getParashaRedirect,
+  resolveStudyRef,
+  getUserProfile,
+  updateUserLocation,
+} from "@/app/actions";
+
+// Segmented Sub-Components
+import ScheduleManager from "./today/ScheduleManager";
+import { LocationHeader } from "./today/LocationHeader";
+import { ZmanimCard } from "./today/ZmanimCard";
+import { LearningCycles } from "./today/LearningCycles";
+import { HolidayEvents } from "./today/HolidayEvents";
 
 interface TodayMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
 }
 
-export function TodayMenu({ isOpen, onClose }: TodayMenuProps) {
+type MenuTab = "TODAY" | "SCHEDULES";
+
+/**
+ * TodayMenu
+ * Main orchestrator for the Daily Sanctuary sidebar.
+ * Refactored into specialized sub-components for maintainability.
+ */
+export function TodayMenu({ isOpen, onClose, onOpen }: TodayMenuProps) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<MenuTab>("TODAY");
   const [learning, setLearning] = useState<DailySchedule | null>(null);
   const [calendar, setCalendar] = useState<UpcomingInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (isOpen && !learning) {
-      const loadData = async () => {
-        setLoading(true);
-        const [learnData, calData] = await Promise.all([
-          fetchDailyLearning(),
-          fetchUpcomingEvents(),
-        ]);
-        setLearning(learnData);
-        setCalendar(calData);
-        setLoading(false);
-      };
-      loadData();
+  // Location State
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [locationName, setLocationName] = useState("Detected Location");
+  const [zipInput, setZipInput] = useState("");
+
+  /**
+   * initData
+   * Wrapped in useCallback to stabilize the reference for useEffect.
+   */
+  const initData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const profile = await getUserProfile();
+      const zip = profile?.location_zip;
+      if (zip) {
+        setLocationName(profile.location_name || "Saved Location");
+      }
+
+      const [learnData, calData] = await Promise.all([
+        fetchDailyLearning(),
+        fetchUpcomingEvents(zip),
+      ]);
+      setLearning(learnData);
+      setCalendar(calData);
+    } finally {
+      setLoading(false);
     }
-  }, [isOpen, learning]);
+  }, []);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (isOpen) {
+      onOpen?.();
+      initData();
+    }
+  }, [isOpen, onOpen, initData]);
 
-  // Helper to format date nicely
+  async function handleSaveLocation() {
+    if (!zipInput || zipInput.length < 5) return;
+    setIsEditingLocation(false);
+    setLoading(true);
+    try {
+      const mockCity = `Zip: ${zipInput}`;
+      await updateUserLocation(zipInput, mockCity);
+      setLocationName(mockCity);
+      const calData = await fetchUpcomingEvents(zipInput);
+      setCalendar(calData);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleStudyClick = async (type: string, name: string, ref: string) => {
+    onClose();
+    if (type === "parasha") {
+      const redirect = await getParashaRedirect(name);
+      if (redirect) {
+        router.push(`/library/tanakh/${redirect.book}/${redirect.chapter}`);
+        return;
+      }
+    }
+    const path = await resolveStudyRef(ref);
+    if (path) router.push(path);
+  };
+
   const todayDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -55,227 +116,109 @@ export function TodayMenu({ isOpen, onClose }: TodayMenuProps) {
 
   return (
     <>
-      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 animate-in fade-in duration-300"
+        className={cn(
+          "fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity md:hidden",
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
         onClick={onClose}
       />
 
-      {/* Slide-over Panel (Right Side) or Modal */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-paper shadow-2xl border-l border-pencil/10 flex flex-col animate-in slide-in-from-right duration-300 sm:rounded-l-3xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 bg-paper/80 backdrop-blur border-b border-pencil/10">
-          <div>
-            <h2 className="font-serif font-bold text-2xl text-ink">Today</h2>
-            <p className="text-xs text-pencil font-medium uppercase tracking-wider">
-              {todayDate}
-            </p>
+      <aside
+        className={cn(
+          "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-300 ease-spring shadow-2xl flex flex-col",
+          isOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        <div className="h-14 border-b border-pencil/10 flex items-center justify-between px-4 bg-paper/80 backdrop-blur shrink-0">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-pencil" />
+            <h2 className="font-serif font-bold text-ink text-lg">
+              Daily Sanctuary
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-pencil/10 transition-colors"
+            className="p-1 rounded-full hover:bg-black/5 transition-colors"
           >
-            <X className="w-6 h-6 text-pencil" />
+            <X className="w-5 h-5 text-pencil" />
           </button>
         </div>
 
-        {/* Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
-          {loading ? (
-            <div className="space-y-4 animate-pulse">
-              <div className="h-32 bg-pencil/10 rounded-xl" />
-              <div className="h-20 bg-pencil/10 rounded-xl" />
-              <div className="h-20 bg-pencil/10 rounded-xl" />
-            </div>
+        {/* Tab Selection */}
+        <div className="flex p-1.5 gap-1 bg-pencil/5 mx-4 mt-4 rounded-xl shrink-0">
+          <button
+            onClick={() => setActiveTab("TODAY")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+              activeTab === "TODAY"
+                ? "bg-white text-ink shadow-sm"
+                : "text-pencil/60"
+            )}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Today
+          </button>
+          <button
+            onClick={() => setActiveTab("SCHEDULES")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+              activeTab === "SCHEDULES"
+                ? "bg-white text-ink shadow-sm"
+                : "text-pencil/60"
+            )}
+          >
+            <Library className="w-3.5 h-3.5" />
+            Schedules
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          {activeTab === "TODAY" ? (
+            loading && !calendar ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-4 text-pencil/30">
+                <Loader2 className="w-8 h-8 animate-spin" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]">
+                  Gathering Wisdom...
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <LocationHeader
+                  isEditing={isEditingLocation}
+                  locationName={locationName}
+                  zipInput={zipInput}
+                  onZipChange={setZipInput}
+                  onSave={handleSaveLocation}
+                  onEditToggle={setIsEditingLocation}
+                />
+
+                <ZmanimCard calendar={calendar} />
+
+                <LearningCycles
+                  learning={learning}
+                  onStudyClick={handleStudyClick}
+                />
+
+                <HolidayEvents events={calendar?.events || []} />
+              </div>
+            )
           ) : (
-            <>
-              {/* --- Daily Study Section --- */}
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-pencil uppercase tracking-widest flex items-center gap-2">
-                    <BookOpen className="w-4 h-4" />
-                    Daily Study
-                  </h3>
-                  <button className="text-[10px] font-bold text-gold hover:underline">
-                    Edit Programs
-                  </button>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-pencil/10 shadow-sm divide-y divide-pencil/5 overflow-hidden">
-                  {/* Torah Portion (Weekly) */}
-                  {calendar?.shabbat.parasha && (
-                    <div className="p-4 hover:bg-pencil/[0.02] transition-colors group cursor-pointer flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-pencil block mb-0.5">
-                          Torah Portion
-                        </span>
-                        <span className="text-ink font-serif font-medium text-lg">
-                          {calendar.shabbat.parasha}
-                        </span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-pencil/30 group-hover:text-gold transition-colors" />
-                    </div>
-                  )}
-
-                  {/* Daf Yomi */}
-                  {learning?.dafyomi && (
-                    <div className="p-4 hover:bg-pencil/[0.02] transition-colors group cursor-pointer flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-pencil block mb-0.5">
-                          Daf Yomi
-                        </span>
-                        <span className="text-ink font-serif font-medium text-lg">
-                          {learning.dafyomi.name}
-                        </span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-pencil/30 group-hover:text-gold transition-colors" />
-                    </div>
-                  )}
-
-                  {/* Tanya (Mock for now as per prompt requirement) */}
-                  <div className="p-4 hover:bg-pencil/[0.02] transition-colors group cursor-pointer flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-pencil block mb-0.5">
-                        Tanya
-                      </span>
-                      <span className="text-ink font-serif font-medium text-lg">
-                        Likutei Amarim, Ch 12
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-pencil/30 group-hover:text-gold transition-colors" />
-                  </div>
-
-                  {/* Add Custom Program Placeholder */}
-                  <div className="p-3 bg-pencil/[0.02] text-center">
-                    <span className="text-xs text-pencil/50 font-medium cursor-pointer hover:text-gold transition-colors">
-                      + Add Custom Program
-                    </span>
-                  </div>
-                </div>
-              </section>
-
-              {/* --- Upcoming Events Section --- */}
-              <section>
-                <h3 className="text-sm font-bold text-pencil uppercase tracking-widest flex items-center gap-2 mb-4">
-                  <Calendar className="w-4 h-4" />
-                  Upcoming
-                </h3>
-
-                <div className="space-y-3">
-                  {/* Shabbat Times Card */}
-                  <div className="bg-ink text-paper p-5 rounded-2xl shadow-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                      <Sun className="w-16 h-16" />
-                    </div>
-
-                    <div className="relative z-10">
-                      <h4 className="font-serif font-bold text-xl mb-1">
-                        Shabbat Times
-                      </h4>
-                      <p className="text-xs text-paper/60 mb-4 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> Detected Location
-                      </p>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-full bg-paper/10">
-                              <Sun className="w-4 h-4 text-gold" />
-                            </div>
-                            <span className="text-sm font-medium">
-                              Candle Lighting
-                            </span>
-                          </div>
-                          <span className="font-mono text-sm">
-                            {calendar?.shabbat.start
-                              ? new Date(
-                                  calendar.shabbat.start
-                                ).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "--:--"}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-full bg-paper/10">
-                              <Moon className="w-4 h-4 text-indigo-300" />
-                            </div>
-                            <span className="text-sm font-medium">
-                              Havdalah
-                            </span>
-                          </div>
-                          <span className="font-mono text-sm">
-                            {calendar?.shabbat.end
-                              ? new Date(
-                                  calendar.shabbat.end
-                                ).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "--:--"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Next Holidays List */}
-                  <div className="bg-white rounded-2xl border border-pencil/10 p-1">
-                    {calendar?.events.map((event, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 flex items-start gap-3 border-b border-pencil/5 last:border-0"
-                      >
-                        <div
-                          className={cn(
-                            "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0",
-                            event.yomtov
-                              ? "bg-red-50 text-red-600"
-                              : "bg-emerald-50 text-emerald-600"
-                          )}
-                        >
-                          <span className="text-[10px] font-bold uppercase">
-                            {new Date(event.date).getDate()}
-                          </span>
-                          <span className="text-[8px] font-bold uppercase">
-                            {new Date(event.date).toLocaleDateString([], {
-                              month: "short",
-                            })}
-                          </span>
-                        </div>
-                        <div>
-                          <h5 className="font-serif font-bold text-ink text-sm">
-                            {event.title}
-                          </h5>
-                          <div className="flex items-center gap-2 mt-1">
-                            {event.yomtov ? (
-                              <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
-                                Work Prohibited
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                Work Permitted
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {calendar?.events.length === 0 && (
-                      <p className="p-4 text-xs text-pencil text-center">
-                        No major holidays upcoming.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </section>
-            </>
+            <ScheduleManager />
           )}
         </div>
-      </div>
+
+        <div className="p-4 border-t border-pencil/10 bg-pencil/5 text-center">
+          <p className="text-[9px] text-pencil uppercase font-bold tracking-widest leading-loose">
+            {todayDate} • Jerusalem:{" "}
+            {new Date().toLocaleTimeString("he-IL", {
+              timeZone: "Asia/Jerusalem",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
+      </aside>
     </>
   );
 }

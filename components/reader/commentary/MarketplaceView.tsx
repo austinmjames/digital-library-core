@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Download,
   Loader2,
-  ChevronRight,
-  ChevronDown,
+  Plus,
+  Trash2,
   CheckCircle2,
   AlertCircle,
+  BookOpen,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,57 +18,62 @@ import {
   UserCommentary,
   CollectionMetadata,
   ImportAction,
+  AuthorMetadata,
 } from "@/lib/types/library";
-import { CommentaryEntry } from "./CommentaryEntry";
+import { fetchAuthorMetadata } from "@/app/actions";
 
 interface MarketplaceViewProps {
   loading: boolean;
   groupedData: Record<string, Record<string, (Commentary | UserCommentary)[]>>;
   collections: CollectionMetadata[];
-  onImport: ImportAction; // Updated to use ImportAction from Canvas
-  languageMode: "en" | "he" | "bilingual";
-  showFootnotes: boolean;
+  onImport: ImportAction;
+  myAuthors: string[];
+  onToggleAuthor: (author: string) => void;
 }
 
 export function MarketplaceView({
   loading,
   groupedData,
-  collections,
+  myAuthors,
+  onToggleAuthor,
   onImport,
-  languageMode,
-  showFootnotes,
 }: MarketplaceViewProps) {
   const [importCode, setImportCode] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<
     "idle" | "success" | "invalid"
   >("idle");
-  const [expandedCommentators, setExpandedCommentators] = useState<
-    Record<string, boolean>
-  >({});
+  const [authorBios, setAuthorBios] = useState<Record<string, AuthorMetadata>>(
+    {}
+  );
+
+  // Fetch bios for visible authors
+  useEffect(() => {
+    const authorsToFetch = Object.values(groupedData)
+      .flatMap((group) => Object.keys(group))
+      .filter(
+        (name) => !authorBios[name] && name !== "Me" && !name.includes("@")
+      );
+
+    authorsToFetch.forEach(async (name) => {
+      const meta = await fetchAuthorMetadata(name);
+      if (meta) setAuthorBios((prev) => ({ ...prev, [name]: meta }));
+    });
+  }, [groupedData, authorBios]);
 
   const handleImportSubmit = async () => {
     if (!importCode.trim()) return;
     setIsImporting(true);
-    setImportStatus("idle");
-
-    // Parent handleImportCollection returns boolean
     const success = await onImport(importCode);
-
-    if (success) {
-      setImportStatus("success");
-      setImportCode("");
-    } else {
-      setImportStatus("invalid");
-    }
-
+    setImportStatus(success ? "success" : "invalid");
+    if (success) setImportCode("");
     setIsImporting(false);
-
     setTimeout(() => setImportStatus("idle"), 3000);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* Quick Import Bar */}
       <div className="space-y-2">
         <div
           className={cn(
@@ -92,10 +99,7 @@ export function MarketplaceView({
           </div>
           <input
             value={importCode}
-            onChange={(e) => {
-              setImportCode(e.target.value);
-              if (importStatus !== "idle") setImportStatus("idle");
-            }}
+            onChange={(e) => setImportCode(e.target.value)}
             placeholder="Enter share code to import..."
             className="flex-1 bg-transparent border-none outline-none text-[11px] font-medium py-1.5 placeholder:text-pencil/50 text-ink"
             onKeyDown={(e) => e.key === "Enter" && handleImportSubmit()}
@@ -114,26 +118,25 @@ export function MarketplaceView({
             )}
           </Button>
         </div>
-
         {importStatus !== "idle" && (
           <div
             className={cn(
-              "flex items-center gap-1.5 px-3 animate-in fade-in slide-in-from-top-1 duration-200",
+              "flex items-center gap-1.5 px-3 animate-in fade-in slide-in-from-top-1",
               importStatus === "success" ? "text-emerald-600" : "text-red-600"
             )}
           >
             {importStatus === "success" ? (
               <>
-                <CheckCircle2 className="w-3 h-3" />
+                <CheckCircle2 className="w-3 h-3" />{" "}
                 <span className="text-[10px] font-bold uppercase tracking-wider">
-                  Book Imported Successfully
+                  Book Imported
                 </span>
               </>
             ) : (
               <>
-                <AlertCircle className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />{" "}
                 <span className="text-[10px] font-bold uppercase tracking-wider">
-                  Invalid Share Code
+                  Invalid Code
                 </span>
               </>
             )}
@@ -156,100 +159,78 @@ export function MarketplaceView({
 
             return (
               <div key={groupName} className="space-y-4">
-                <div className="flex items-center gap-2 px-1">
-                  <div
-                    className={cn(
-                      "w-1 h-3 rounded-full",
-                      groupName === "Personal"
-                        ? "bg-emerald-500"
-                        : groupName === "Classic"
-                        ? "bg-gold"
-                        : "bg-indigo-500"
-                    )}
-                  />
+                <div className="flex items-center gap-2 px-1 border-b border-pencil/5 pb-2">
                   <span className="text-[10px] font-bold text-pencil uppercase tracking-[0.2em]">
-                    {groupName}{" "}
-                    {groupName === "Personal" ? "Shared Books" : "Commentaries"}
+                    {groupName === "Classic"
+                      ? "Classic Commentaries"
+                      : groupName === "Personal"
+                      ? "Shared Study Books"
+                      : groupName}
                   </span>
                 </div>
 
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-4">
                   {authorKeys.map((author) => {
-                    const isExpanded = expandedCommentators[author];
-                    const collMeta = collections.find((c) => c.name === author);
+                    const isAdded = myAuthors.includes(author);
+                    const bio = authorBios[author];
 
                     return (
                       <div
                         key={author}
-                        className="bg-white rounded-xl border border-pencil/10 shadow-sm hover:border-gold/30 transition-all overflow-hidden"
+                        className="p-5 bg-white rounded-2xl border border-pencil/10 shadow-sm hover:border-gold/20 transition-all flex flex-col gap-4"
                       >
-                        <button
-                          onClick={() =>
-                            setExpandedCommentators((p) => ({
-                              ...p,
-                              [author]: !p[author],
-                            }))
-                          }
-                          className="w-full p-4 flex items-center justify-between hover:bg-pencil/[0.01]"
-                        >
-                          <div className="flex items-center gap-2">
-                            <ChevronRight
-                              className={cn(
-                                "w-3 h-3 text-pencil transition-transform",
-                                isExpanded && "rotate-90"
-                              )}
-                            />
-                            <div className="flex flex-col items-start text-left">
-                              <div className="flex items-center gap-2 text-left font-bold text-sm text-ink/80">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-pencil/5 flex items-center justify-center text-pencil/30">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-sm text-ink">
                                 {author}
-                              </div>
-                              <span className="text-[9px] text-pencil/40 font-medium uppercase">
-                                {authors[author].length} Entries Available
                               </span>
+                              {bio?.era && (
+                                <span className="text-[9px] font-bold text-gold/60 uppercase tracking-widest">
+                                  {bio.era} •{" "}
+                                  {bio.died ? `d. ${bio.died}` : "Unknown Era"}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <ChevronDown
-                            className={cn(
-                              "w-4 h-4 text-pencil/20 transition-transform",
-                              isExpanded && "rotate-180"
-                            )}
-                          />
-                        </button>
 
-                        {isExpanded && (
-                          <div className="px-4 pb-4 border-t border-pencil/5 pt-3 divide-y divide-pencil/5">
-                            {authors[author].map((item) => (
-                              <CommentaryEntry
-                                key={item.id}
-                                id={item.id}
-                                textHe={
-                                  "text_he" in item ? item.text_he : undefined
-                                }
-                                textEn={
-                                  "text_en" in item
-                                    ? item.text_en
-                                    : (item as UserCommentary).content
-                                }
-                                isUserNote={"content" in item}
-                                date={
-                                  "created_at" in item
-                                    ? item.created_at
-                                    : undefined
-                                }
-                                authorDisplayName={
-                                  "user_name" in item
-                                    ? (item as UserCommentary).user_name
-                                    : "unnamed"
-                                }
-                                isCollaborative={
-                                  !!collMeta?.is_collaborative ||
-                                  collMeta?.permission !== "owner"
-                                }
-                                authorName={author}
-                                languageMode={languageMode}
-                                showFootnotes={showFootnotes}
-                              />
-                            ))}
+                          <Button
+                            size="sm"
+                            variant={isAdded ? "ghost" : "outline"}
+                            onClick={() => onToggleAuthor(author)}
+                            className={cn(
+                              "h-8 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all",
+                              isAdded
+                                ? "text-red-500 hover:bg-red-50 px-2"
+                                : "text-emerald-600 border-emerald-100 bg-emerald-50/30 hover:bg-emerald-50 px-3"
+                            )}
+                          >
+                            {isAdded ? (
+                              <>
+                                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Remove
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {bio?.description_en && (
+                          <div className="bg-pencil/[0.02] rounded-xl p-3 border border-pencil/5">
+                            <div className="flex items-center gap-1.5 mb-1 opacity-40">
+                              <Info className="w-3 h-3" />
+                              <span className="text-[9px] font-bold uppercase tracking-tighter">
+                                About the Author
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-pencil/70 leading-relaxed italic">
+                              {bio.description_en}
+                            </p>
                           </div>
                         )}
                       </div>

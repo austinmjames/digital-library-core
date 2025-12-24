@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, CSSProperties } from "react";
-import { fetchNextChapter } from "@/app/actions";
+import { useState, useEffect, useRef, CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import Chapter from "./Chapter";
 import { useTextSettings } from "@/components/context/text-settings-context";
-import { NavigationMenu } from "./NavigationMenu";
-import { ReaderHeader } from "./ReaderHeader";
-import { CommentaryPanel } from "./CommentaryPanel";
-import { ChapterData } from "@/lib/types/library";
+import { ReaderHeader } from "@/components/reader/header/ReaderHeader";
+import { ReaderSidePanels } from "@/components/reader/ReaderSidePanels";
+import { ChapterList } from "@/components/reader/ChapterList";
+import { ChapterData, Verse } from "@/lib/types/library";
+import { useReaderInfiniteScroll } from "@/components/hooks/useReaderInfiniteScroll";
 
 interface InteractiveReaderProps {
   initialChapter: ChapterData;
@@ -16,158 +15,81 @@ interface InteractiveReaderProps {
   activeTranslation?: string;
 }
 
+/**
+ * InteractiveReader
+ * Main study interface for TorahPro.
+ * Implements exclusive panel switching: only one slide panel can be open at a time.
+ */
 export default function InteractiveReader({
   initialChapter,
   bookSlug,
-  activeTranslation = "jps-1985",
 }: InteractiveReaderProps) {
   const { displayMode, fontSize } = useTextSettings();
 
-  const ALLOW_CROSS_BOOK_SCROLLING = ["tanakh"];
-  const isCrossBookAllowed =
-    initialChapter.collection &&
-    ALLOW_CROSS_BOOK_SCROLLING.includes(
-      initialChapter.collection.toLowerCase()
-    );
+  // --- State Management ---
+  const [activeLayerId, setActiveLayerId] = useState<string>(
+    initialChapter.activeTranslation || "jps-1985"
+  );
 
-  const [chapters, setChapters] = useState<ChapterData[]>([initialChapter]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingPrev, setIsLoadingPrev] = useState(false);
+  // Overlays
+  const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isTransPanelOpen, setIsTransPanelOpen] = useState(false);
+  const [isTodayOpen, setIsTodayOpen] = useState(false);
 
-  const [hasMore, setHasMore] = useState(!!initialChapter?.nextRef);
-  const [hasPrev, setHasPrev] = useState(!!initialChapter?.prevRef);
-
+  // Content tracking
   const [activeBook, setActiveBook] = useState(initialChapter?.book || "");
   const [activeChapter, setActiveChapter] = useState(
     initialChapter?.chapterNum || 0
   );
-  const [isNavOpen, setIsNavOpen] = useState(false);
 
-  // State for Commentary Panel
+  // Verse Interaction (Triggers Commentary)
   const [selectedVerseRef, setSelectedVerseRef] = useState<string | null>(null);
+  const [editingVerse, setEditingVerse] = useState<Verse | null>(null);
+
+  // --- Exclusive Panel Logic ---
+
+  const toggleTodayMenu = () => {
+    if (isTodayOpen) {
+      setIsTodayOpen(false);
+    } else {
+      // Open Today, close everything else
+      setIsTodayOpen(true);
+      setIsTransPanelOpen(false);
+      setSelectedVerseRef(null);
+    }
+  };
+
+  const openTranslations = () => {
+    setIsTransPanelOpen(true);
+    setIsTodayOpen(false);
+    setSelectedVerseRef(null);
+  };
+
+  const handleVerseSelection = (id: string) => {
+    if (selectedVerseRef === id) {
+      setSelectedVerseRef(null);
+    } else {
+      // Open Commentary for verse, close everything else
+      setSelectedVerseRef(id);
+      setIsTransPanelOpen(false);
+      setIsTodayOpen(false);
+      setEditingVerse(null);
+    }
+  };
+
+  // --- Infinite Scroll & Observers ---
+  const { chapters, isLoading, hasPrev, loadMore, loadPrev } =
+    useReaderInfiniteScroll(initialChapter, activeLayerId);
 
   const loaderRef = useRef<HTMLDivElement>(null);
   const prevLoaderRef = useRef<HTMLDivElement>(null);
   const chapterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const getChapterId = (id: string) =>
-    `chapter-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
-
-  const loadPrev = useCallback(async () => {
-    if (isLoadingPrev) return;
-
-    const firstChapter = chapters[0];
-    const targetRef = firstChapter?.prevRef;
-
-    if (!targetRef) {
-      setHasPrev(false);
-      return;
-    }
-
-    const doc = document.documentElement;
-    const previousHeight = doc.scrollHeight;
-    const previousScrollTop = window.scrollY;
-
-    setIsLoadingPrev(true);
-    try {
-      const newChapter = await fetchNextChapter(targetRef, activeTranslation);
-      if (newChapter) {
-        if (!isCrossBookAllowed && newChapter.book !== firstChapter.book) {
-          setHasPrev(false);
-          return;
-        }
-
-        if (chapters.some((c) => c.id === newChapter.id)) {
-          setHasPrev(false);
-          return;
-        }
-
-        setChapters((prev) => [newChapter, ...prev]);
-        setHasPrev(!!newChapter.prevRef);
-
-        requestAnimationFrame(() => {
-          const newHeight = doc.scrollHeight;
-          const heightDiff = newHeight - previousHeight;
-          if (heightDiff > 0) {
-            window.scrollTo({
-              top: previousScrollTop + heightDiff,
-              behavior: "instant",
-            });
-          }
-        });
-      } else {
-        setHasPrev(false);
-      }
-    } catch (error) {
-      console.error("loadPrev Error:", error);
-    } finally {
-      setIsLoadingPrev(false);
-    }
-  }, [chapters, isLoadingPrev, isCrossBookAllowed, activeTranslation]);
-
-  const loadMore = useCallback(async () => {
-    if (isLoading || !hasMore) return;
-    const lastChapter = chapters[chapters.length - 1];
-    if (!lastChapter?.nextRef) {
-      setHasMore(false);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const newChapter = await fetchNextChapter(
-        lastChapter.nextRef,
-        activeTranslation
-      );
-      if (newChapter) {
-        if (!isCrossBookAllowed && newChapter.book !== lastChapter.book) {
-          setHasMore(false);
-          return;
-        }
-        if (chapters.some((c) => c.id === newChapter.id)) {
-          setHasMore(false);
-          return;
-        }
-        setChapters((prev) => [...prev, newChapter]);
-        setHasMore(!!newChapter.nextRef);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("loadMore Error:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [chapters, isLoading, hasMore, isCrossBookAllowed, activeTranslation]);
-
   useEffect(() => {
-    if (bookSlug) {
-      setChapters([initialChapter]);
-      setHasMore(!!initialChapter.nextRef);
-      setHasPrev(!!initialChapter.prevRef);
-      setActiveBook(initialChapter.book);
-      setActiveChapter(initialChapter.chapterNum);
-      window.scrollTo({ top: 0, behavior: "instant" });
-      setSelectedVerseRef(null);
-    }
-  }, [bookSlug, initialChapter]);
-
-  useEffect(() => {
-    if (
-      isCrossBookAllowed &&
-      chapters.length === 1 &&
-      chapters[0].chapterNum === 1 &&
-      chapters[0].prevRef
-    ) {
-      loadPrev();
-    }
-  }, [isCrossBookAllowed, chapters, loadPrev]);
-
-  useEffect(() => {
-    const observerOptions = { rootMargin: "1200px" };
+    const options = { rootMargin: "1200px" };
     const downObserver = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) loadMore();
-    }, observerOptions);
+    }, options);
 
     const upObserver = new IntersectionObserver(
       (entries) => {
@@ -208,45 +130,31 @@ export default function InteractiveReader({
     return () => observer.disconnect();
   }, [chapters]);
 
-  const isAtBookStart = chapters[0]?.chapterNum === 1 && isCrossBookAllowed;
-  const getPrevLabel = () => {
-    if (isLoadingPrev) {
-      return isAtBookStart
-        ? "Loading Previous Book..."
-        : "Loading Previous Chapter...";
-    }
-    return isAtBookStart
-      ? "Previous Book Available"
-      : "Previous Chapter Available";
-  };
-
-  const handleVerseClick = (verseId: string) => {
-    if (selectedVerseRef === verseId) {
-      setSelectedVerseRef(null);
-    } else {
-      setSelectedVerseRef(verseId);
-    }
-  };
-
-  // Determine slide class
-  const slideClass = selectedVerseRef ? "md:mr-[400px] lg:mr-[450px]" : "";
+  // UI calculations for main content push
+  const isPanelOpen =
+    !!selectedVerseRef || !!editingVerse || isTransPanelOpen || isTodayOpen;
+  const slideClass = isPanelOpen ? "md:mr-[400px] lg:mr-[450px]" : "";
 
   return (
     <div className="min-h-screen bg-paper transition-colors duration-500 overflow-x-hidden relative">
-      <NavigationMenu
-        isOpen={isNavOpen}
-        onClose={() => setIsNavOpen(false)}
-        currentBook={activeBook}
+      <ReaderSidePanels
+        isNavOpen={isNavOpen}
+        setIsNavOpen={setIsNavOpen}
+        activeBook={activeBook}
+        activeChapter={activeChapter}
+        selectedVerseRef={selectedVerseRef}
+        setSelectedVerseRef={setSelectedVerseRef}
+        isTransPanelOpen={isTransPanelOpen}
+        setIsTransPanelOpen={setIsTransPanelOpen}
+        isTodayOpen={isTodayOpen}
+        setIsTodayOpen={setIsTodayOpen}
+        activeLayerId={activeLayerId}
+        setActiveLayerId={setActiveLayerId}
+        editingVerse={editingVerse}
+        setEditingVerse={setEditingVerse}
+        bookSlug={bookSlug}
       />
 
-      <CommentaryPanel
-        verseRef={selectedVerseRef}
-        onClose={() => setSelectedVerseRef(null)}
-      />
-
-      {/* Sticky/Fixed Header Container 
-        Applies the same slide/squeeze class as the main content
-      */}
       <div
         className={cn(
           "fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-spring",
@@ -257,12 +165,14 @@ export default function InteractiveReader({
           activeBook={activeBook}
           activeChapter={activeChapter}
           onOpenNav={() => setIsNavOpen(true)}
+          onOpenTranslations={openTranslations}
+          onToggleToday={toggleTodayMenu}
+          isTodayActive={isTodayOpen}
+          activeVersionId={activeLayerId}
+          onSelectVersion={setActiveLayerId}
         />
       </div>
 
-      {/* Main Content Wrapper 
-        Added 'pt-14' (3.5rem) to push content down below the fixed header.
-      */}
       <main
         className={cn(
           "transition-all duration-300 ease-spring pt-14",
@@ -281,52 +191,22 @@ export default function InteractiveReader({
           <div
             ref={prevLoaderRef}
             className={cn(
-              "flex flex-col items-center justify-center transition-all duration-500",
-              hasPrev
-                ? "h-32 opacity-100 mb-8"
-                : "h-0 opacity-0 overflow-hidden"
+              "h-32 flex items-center justify-center transition-opacity duration-300",
+              !hasPrev && "hidden"
             )}
-          >
-            {hasPrev && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-[10px] text-pencil/40 uppercase tracking-[0.2em] font-medium text-center">
-                  {getPrevLabel()}
-                </div>
-                {isLoadingPrev && (
-                  <div className="w-5 h-5 border-2 border-pencil/20 border-t-gold rounded-full animate-spin" />
-                )}
-              </div>
-            )}
-          </div>
-
-          {chapters.map((chapterData) => (
-            <div
-              key={chapterData.id}
-              id={getChapterId(chapterData.id)}
-              data-book={chapterData.book}
-              data-chapter={chapterData.chapterNum}
-              ref={(el) => {
-                if (el) chapterRefs.current.set(chapterData.id, el);
-              }}
-              className="mb-24 scroll-mt-24"
-            >
-              <div className="py-12 text-center select-none">
-                <h2 className="text-4xl md:text-5xl font-serif text-ink tracking-tight leading-none">
-                  <span className="block text-sm md:text-base font-sans font-bold uppercase tracking-[0.2em] text-pencil/60 mb-3">
-                    {chapterData.book}
-                  </span>
-                  {chapterData.chapterNum}
-                </h2>
-              </div>
-              <Chapter
-                verses={chapterData.verses}
-                chapterNum={chapterData.chapterNum}
-                selectedVerseId={selectedVerseRef}
-                onVerseClick={handleVerseClick}
-              />
-            </div>
-          ))}
-
+          />
+          <ChapterList
+            chapters={chapters}
+            chapterRefs={chapterRefs}
+            selectedVerseRef={selectedVerseRef}
+            onVerseClick={handleVerseSelection}
+            onVerseLongPress={(v) => {
+              setEditingVerse(v);
+              setSelectedVerseRef(null);
+              setIsTransPanelOpen(false);
+              setIsTodayOpen(false);
+            }}
+          />
           <div
             ref={loaderRef}
             className="h-48 flex items-center justify-center"
