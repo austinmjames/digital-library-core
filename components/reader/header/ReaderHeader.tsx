@@ -36,7 +36,7 @@ interface ReaderHeaderProps {
 /**
  * ReaderHeader
  * Main navigation and settings bar for the reading experience.
- * Updated to include the User Profile trigger for authenticated users.
+ * Updated to toggle between User Profile and Login based on authentication state.
  */
 export function ReaderHeader({
   activeBook,
@@ -119,19 +119,30 @@ export function ReaderHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User Profile Access */}
-        {!authLoading && user && (
-          <Link href="/profile">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-10 h-10 rounded-full border border-pencil/10 bg-white/50 hover:bg-white transition-all active:scale-95 ml-1"
-              title="Profile"
-            >
-              <User className="w-5 h-5 text-pencil" />
-            </Button>
-          </Link>
-        )}
+        {/* User Auth Trigger: Profile for logged in users, Login for guests */}
+        {!authLoading &&
+          (user ? (
+            <Link href="/profile">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-10 h-10 rounded-full border border-pencil/10 bg-white/50 hover:bg-white transition-all active:scale-95 ml-1"
+                title="Profile"
+              >
+                <User className="w-5 h-5 text-pencil" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/login">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 px-4 rounded-full text-xs font-bold uppercase tracking-wider text-pencil hover:text-ink hover:bg-black/5 dark:hover:bg-white/10 ml-1"
+              >
+                Login
+              </Button>
+            </Link>
+          ))}
       </div>
     </header>
   );
