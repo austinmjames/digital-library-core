@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+
+// ... rest of your file
 import LoginForm from "@/components/auth/login-form";
 
 /**
