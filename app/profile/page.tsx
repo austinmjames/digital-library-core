@@ -1,4 +1,3 @@
-"use client";
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
@@ -11,6 +10,10 @@ import { ArrowLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/context/auth-context";
 
+/**
+ * app/profile/page.tsx
+ * Added force-dynamic to prevent Vercel build-time Supabase errors.
+ */
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
@@ -55,8 +58,7 @@ export default function ProfilePage() {
     if (user) {
       getProfile();
     } else if (!authLoading) {
-      // Not logged in, redirect
-      router.push("/auth/login");
+      router.push("/login");
     }
   }, [user, authLoading, router, supabase]);
 
@@ -73,10 +75,10 @@ export default function ProfilePage() {
       });
 
       if (error) throw error;
+      // Note: Use a toast or custom modal in production; alert() can be tricky in frames
       alert("Profile updated!");
     } catch (error) {
       console.error("Error updating the data:", error);
-      alert("Error updating profile!");
     } finally {
       setSaving(false);
     }
@@ -111,7 +113,7 @@ export default function ProfilePage() {
             <Input
               id="email"
               type="text"
-              value={user?.email}
+              value={user?.email || ""}
               disabled
               className="bg-pencil/5"
             />
