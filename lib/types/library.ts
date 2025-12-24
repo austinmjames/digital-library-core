@@ -73,22 +73,25 @@ export interface UserTranslation {
   user_id: string;
 }
 
+// --- ADDED DISCUSSION TYPES ---
 export interface DiscussionGroup {
   id: string;
   name: string;
   invite_code: string;
   created_by: string;
+  created_at?: string;
 }
 
 export interface DiscussionMessage {
   id: string;
   group_id: string;
   user_id: string;
-  user_name: string;
+  user_name: string; // Cached display name for performance
   verse_ref: string;
   content: string;
   created_at: string;
 }
+// -----------------------------
 
 export interface CollectionMetadata {
   id: string;

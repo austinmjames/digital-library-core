@@ -7,8 +7,8 @@ import { TRANSLATION_MAP } from "@/lib/constants";
 
 /**
  * fetchChapterBySlug
- * The core engine of the reader. Pulls text layers and dynamic markers.
- * Resolved: Fixed 'any' type in overrides and aligned with updated Verse type.
+ * The core engine of the reader. Pulls text layers (Hebrew, base English)
+ * and merges the specialized Sovereignty Layer (user translations) if an ID is provided.
  */
 export async function fetchChapterBySlug(
   rawBookSlug: string,
@@ -20,12 +20,15 @@ export async function fetchChapterBySlug(
   const bookSlug = rawBookSlug.toLowerCase();
   if (isNaN(chapterNum)) return null;
 
+  // Determine if we are viewing a specific Sovereignty project (indicated by a UUID)
+  // or a standard library version (e.g., 'jps-1985').
   const isCustomProject = translationSlug.length > 20;
   const versionTitle = isCustomProject
-    ? TRANSLATION_MAP["jps-1985"]
+    ? TRANSLATION_MAP["jps-1985"] // Use JPS as fallback context for custom projects
     : TRANSLATION_MAP[translationSlug] || translationSlug;
 
   try {
+    // 1. Fetch Book Metadata
     const { data: book } = await supabase
       .from("library_books")
       .select("*")
@@ -33,6 +36,7 @@ export async function fetchChapterBySlug(
       .single();
     if (!book) return null;
 
+    // 2. Parallel fetch of all required layers
     const [heRes, enRes, markersRes] = await Promise.all([
       supabase
         .from("text_versions")
@@ -56,6 +60,7 @@ export async function fetchChapterBySlug(
         .eq("c1_index", chapterNum),
     ]);
 
+    // 3. Fetch Sovereignty Overrides if active
     const overrides: Map<number, string> = new Map();
     if (isCustomProject) {
       const { data: customData } = await supabase
@@ -64,18 +69,22 @@ export async function fetchChapterBySlug(
         .eq("version_id", translationSlug)
         .eq("book_slug", bookSlug)
         .eq("c1", chapterNum);
+
       customData?.forEach((row: { c2: number; custom_content: string }) =>
         overrides.set(row.c2, row.custom_content)
       );
     }
 
+    // 4. Map markers (Parashiot, Aliyot, etc.)
     const markerMap = new Map<number, string>();
     markersRes.data?.forEach((m) => {
+      // Prioritize Parashah starts over other marker types
       if (m.type === "parasha" || !markerMap.has(m.c2_index)) {
         markerMap.set(m.c2_index, m.label);
       }
     });
 
+    // 5. Merge Layers into Unified Verse Objects
     interface TextRow {
       c2_index: number;
       content: string;
@@ -86,6 +95,7 @@ export async function fetchChapterBySlug(
     const enMap = new Map(
       (enRes.data as TextRow[] | null)?.map((v) => [v.c2_index, v.content])
     );
+
     const lastVerseNum = Math.max(
       ...Array.from(heMap.keys()),
       ...Array.from(enMap.keys()),
@@ -98,11 +108,13 @@ export async function fetchChapterBySlug(
         id: `${book.title_en} ${chapterNum}:${i}`,
         c2_index: i,
         he: processText(heMap.get(i) || ""),
+        // The core Sovereignty Logic: Custom content > Context translation > empty
         en: processText(overrides.get(i) || enMap.get(i) || ""),
         parashaStart: markerMap.get(i),
       });
     }
 
+    // 6. Smart Navigation (Next/Prev References)
     let nextRef: string | undefined;
     let prevRef: string | undefined;
 
@@ -112,6 +124,7 @@ export async function fetchChapterBySlug(
       .eq("book_slug", bookSlug)
       .eq("c1_index", chapterNum + 1)
       .limit(1);
+
     if (nextCount && nextCount > 0) {
       nextRef = `${book.title_en} ${chapterNum + 1}`;
     } else {
@@ -159,14 +172,14 @@ export async function fetchChapterBySlug(
       activeTranslation: translationSlug,
     };
   } catch (err) {
-    console.error("fetchChapterBySlug Error:", err);
+    console.error("fetchChapterBySlug Critical Failure:", err);
     return null;
   }
 }
 
 /**
  * fetchNextChapter
- * Helper for infinite scroll logic.
+ * Specialized helper for bidirectional infinite scroll.
  */
 export async function fetchNextChapter(
   ref: string,
@@ -174,6 +187,7 @@ export async function fetchNextChapter(
 ): Promise<ChapterData | null> {
   const parts = ref.trim().split(" ");
   const chapter = parts.pop() || "1";
+  // Join remaining parts for books with multiple words (e.g., "Song of Songs")
   const bookSlug = parts.join("-").toLowerCase();
   return fetchChapterBySlug(bookSlug, chapter, translation);
 }

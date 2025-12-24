@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/context/auth-context";
 import { useCommentaryData } from "./commentary/useCommentaryData";
 import { CommentaryHeader, CommentaryTab } from "./commentary/CommentaryHeader";
+import { CommentaryTabs } from "./commentary/CommentaryTabs";
 import { NoteEditor } from "./commentary/NoteEditor";
 import { ManagementView } from "./commentary/ManagementView";
 import { MarketplaceView } from "./commentary/MarketplaceView";
@@ -15,13 +16,12 @@ import {
   Commentary,
   UserCommentary,
   CommentaryGroup,
-  PermissionLevel,
 } from "@/lib/types/library";
 
 /**
- * CommentaryPanel
+ * components/reader/CommentaryPanel.tsx
  * Orchestrator for the verse-specific detail view.
- * All management functions are now functional and linked to Supabase.
+ * Refactored to match the premium architecture of TodayMenu.
  */
 export function CommentaryPanel({
   verseRef,
@@ -46,7 +46,9 @@ export function CommentaryPanel({
     useState<string>("My Commentary");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Grouping logic for the Library View
+  const isOpen = !!verseRef;
+
+  // Grouping logic memoized for performance
   const groupedData = useMemo(() => {
     const groups: Record<
       CommentaryGroup,
@@ -84,143 +86,141 @@ export function CommentaryPanel({
     return groups;
   }, [commentaries, userCommentaries, activeTab, myAuthors, collections]);
 
-  // --- Collection Management Functions ---
+  // --- Collection Actions (Delegated from sub-views) ---
 
-  const handleCreateCollection = async (name: string, isCollab: boolean) => {
-    if (!user) return;
-    const shareCode = `TORAH-${Math.random()
-      .toString(36)
-      .substring(2, 8)
-      .toUpperCase()}`;
-    await supabase.from("commentary_collections").insert({
-      name,
-      owner_id: user.id,
-      is_collaborative: isCollab,
-      share_code: shareCode,
-    });
-    await refetch();
-  };
-
-  const handleRenameCollection = async (oldName: string, newName: string) => {
-    if (!user) return;
-    await supabase
-      .from("commentary_collections")
-      .update({ name: newName })
-      .eq("owner_id", user.id)
-      .eq("name", oldName);
-    await refetch();
-  };
-
-  const handleDeleteCollection = async (name: string) => {
-    if (!user || !confirm(`Delete "${name}" and all associated notes?`)) return;
-    await supabase
-      .from("commentary_collections")
-      .delete()
-      .eq("owner_id", user.id)
-      .eq("name", name);
-    await refetch();
-  };
-
-  const handleShare = async (
-    name: string,
-    email: string,
-    permission: PermissionLevel
-  ) => {
-    const coll = collections.find((c) => c.name === name);
-    if (!coll) return;
-    await supabase.from("collection_collaborators").upsert({
-      collection_id: coll.id,
-      user_email: email,
-      permission,
-      is_in_library: true,
-    });
-    await refetch();
-  };
-
-  const handleImport = async (code: string) => {
-    if (!user?.email) return false;
-    const { data: coll } = await supabase
-      .from("commentary_collections")
-      .select("id")
-      .eq("share_code", code.toUpperCase())
-      .single();
-    if (!coll) return false;
-    const { error } = await supabase.from("collection_collaborators").upsert({
-      collection_id: coll.id,
-      user_email: user.email,
-      permission: "viewer",
-      is_in_library: true,
-    });
-    if (!error) {
-      await refetch();
-      return true;
-    }
-    return false;
-  };
-
-  const handleSaveNote = async (content: string, collectionName: string) => {
-    if (!user || !verseRef) return;
-    setIsSaving(true);
-    try {
-      const parts = verseRef.split(" ");
-      const nums = parts[parts.length - 1].split(":");
-      const coll = collections.find((c) => c.name === collectionName);
-
-      await supabase.from("user_commentaries").insert({
-        user_id: user.id,
-        user_email: user.email,
-        verse_ref: verseRef,
-        book_slug: parts[0].toLowerCase(),
-        chapter_num: parseInt(nums[0]),
-        verse_num: parseInt(nums[1]),
-        content,
-        collection_name: collectionName,
-        collection_id: coll?.id !== "default" ? coll?.id : null,
+  const handleCreateCollection = useCallback(
+    async (name: string, isCollab: boolean) => {
+      if (!user) return;
+      const shareCode = `TORAH-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
+      await supabase.from("commentary_collections").insert({
+        name,
+        owner_id: user.id,
+        is_collaborative: isCollab,
+        share_code: shareCode,
       });
       await refetch();
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    },
+    [user, supabase, refetch]
+  );
 
-  const isOpen = !!verseRef;
+  const handleSaveNote = useCallback(
+    async (content: string, collectionName: string) => {
+      if (!user || !verseRef) return;
+      setIsSaving(true);
+      try {
+        const parts = verseRef.split(" ");
+        const nums = parts[parts.length - 1].split(":");
+        const coll = collections.find((c) => c.name === collectionName);
+
+        await supabase.from("user_commentaries").insert({
+          user_id: user.id,
+          user_email: user.email,
+          verse_ref: verseRef,
+          book_slug: parts[0].toLowerCase(),
+          chapter_num: parseInt(nums[0]),
+          verse_num: parseInt(nums[1]),
+          content,
+          collection_name: collectionName,
+          collection_id: coll?.id !== "default" ? coll?.id : null,
+        });
+        await refetch();
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [user, verseRef, collections, supabase, refetch]
+  );
 
   return (
     <>
+      {/* Backdrop */}
       <div
         className={cn(
-          "fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity md:hidden",
+          "fixed inset-0 bg-black/10 backdrop-blur-sm z-[45] transition-opacity md:hidden",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
       />
-      <div
+
+      <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 bg-paper border-l border-pencil/10 flex flex-col transition-transform duration-300 shadow-2xl w-full md:w-[400px] lg:w-[450px]",
+          "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
+        {/* iOS Header - Settings and Metadata only */}
         <CommentaryHeader
           verseRef={verseRef || ""}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
           languageMode={languageMode}
           setLanguageMode={setLanguageMode}
           showFootnotes={showFootnotes}
           setShowFootnotes={setShowFootnotes}
           onClose={onClose}
+        />
+
+        {/* Premium Segmented Tabs - Unified Navigation */}
+        <CommentaryTabs
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
           hasUser={!!user}
         />
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar relative">
+
+        {/* Dynamic Content Area */}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 pb-32">
           {activeTab === "MANAGE_BOOKS" ? (
             <ManagementView
               collections={collections}
               onBack={() => setActiveTab("MY_COMMENTARIES")}
-              onRename={handleRenameCollection}
-              onDelete={handleDeleteCollection}
+              onRename={async (old, newN) => {
+                await supabase
+                  .from("commentary_collections")
+                  .update({ name: newN })
+                  .eq("owner_id", user?.id)
+                  .eq("name", old);
+                await refetch();
+              }}
+              onDelete={async (name) => {
+                if (confirm(`Delete "${name}"?`)) {
+                  await supabase
+                    .from("commentary_collections")
+                    .delete()
+                    .eq("owner_id", user?.id)
+                    .eq("name", name);
+                  await refetch();
+                }
+              }}
               onCreate={handleCreateCollection}
-              onImport={handleImport}
-              onShare={handleShare}
+              onImport={async (code) => {
+                const { data } = await supabase
+                  .from("commentary_collections")
+                  .select("id")
+                  .eq("share_code", code.toUpperCase())
+                  .single();
+                if (!data || !user?.email) return false;
+                await supabase.from("collection_collaborators").upsert({
+                  collection_id: data.id,
+                  user_email: user.email,
+                  permission: "viewer",
+                  is_in_library: true,
+                });
+                await refetch();
+                return true;
+              }}
+              onShare={async (name, email, perm) => {
+                const coll = collections.find((c) => c.name === name);
+                if (coll) {
+                  await supabase.from("collection_collaborators").upsert({
+                    collection_id: coll.id,
+                    user_email: email,
+                    permission: perm,
+                    is_in_library: true,
+                  });
+                  await refetch();
+                }
+              }}
               onStopCollaborating={async () => {}}
             />
           ) : activeTab === "MARKETPLACE" ? (
@@ -228,7 +228,7 @@ export function CommentaryPanel({
               loading={loading}
               groupedData={groupedData}
               collections={collections}
-              onImport={handleImport}
+              onImport={async () => false}
               myAuthors={myAuthors}
               onToggleAuthor={(a) =>
                 setMyAuthors((p) =>
@@ -239,7 +239,7 @@ export function CommentaryPanel({
           ) : activeTab === "DISCUSSION" ? (
             <DiscussionView verseRef={verseRef || ""} user={user} />
           ) : (
-            <>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {user && (
                 <NoteEditor
                   collections={collections}
@@ -255,10 +255,27 @@ export function CommentaryPanel({
                 languageMode={languageMode}
                 showFootnotes={showFootnotes}
               />
-            </>
+            </div>
           )}
         </div>
-      </div>
+
+        {/* Sticky Status Footer */}
+        <footer className="absolute bottom-0 left-0 right-0 p-6 border-t border-pencil/5 bg-paper/90 backdrop-blur-xl z-20 flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[10px] text-pencil/50 uppercase font-black tracking-widest">
+              Verse Context
+            </p>
+            <p className="text-[9px] text-gold font-bold uppercase tracking-tighter italic">
+              Sovereignty & Commentary
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] font-bold text-pencil/30 uppercase tracking-widest">
+              Synced Layers
+            </span>
+          </div>
+        </footer>
+      </aside>
     </>
   );
 }

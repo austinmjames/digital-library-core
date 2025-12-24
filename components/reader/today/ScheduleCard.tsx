@@ -4,7 +4,7 @@ import React from "react";
 import {
   Plus,
   Calendar,
-  ListOrdered,
+  List,
   Search,
   Loader2,
   ChevronRight,
@@ -27,7 +27,7 @@ interface ScheduleCardProps {
 /**
  * ScheduleCard
  * Renders an individual schedule with a progress bar and milestone tracking.
- * Refactored to use useScheduleCard hook and MilestoneItem component.
+ * Refactored to use standard icons.
  */
 export function ScheduleCard({ schedule, onUpdate }: ScheduleCardProps) {
   const {
@@ -74,7 +74,7 @@ export function ScheduleCard({ schedule, onUpdate }: ScheduleCardProps) {
               {schedule.schedule_type === "calendar" ? (
                 <Calendar className="w-5 h-5" />
               ) : (
-                <ListOrdered className="w-5 h-5" />
+                <List className="w-5 h-5" />
               )}
             </div>
             <div>

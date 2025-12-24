@@ -1,6 +1,6 @@
 "use client";
 
-import { X, MessageSquare, ChevronDown, Check, Settings } from "lucide-react";
+import { X, MessageSquare, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -17,110 +17,99 @@ export type CommentaryTab =
 
 interface CommentaryHeaderProps {
   verseRef: string;
-  activeTab: CommentaryTab;
-  setActiveTab: (tab: CommentaryTab) => void;
   languageMode: "en" | "he" | "bilingual";
   setLanguageMode: (mode: "en" | "he" | "bilingual") => void;
   showFootnotes: boolean;
   setShowFootnotes: (show: boolean) => void;
   onClose: () => void;
-  hasUser: boolean;
 }
 
+/**
+ * components/reader/commentary/CommentaryHeader.tsx
+ * Clean iOS-style header focused on display settings and verse metadata.
+ * Navigation logic has been moved to CommentaryTabs for cleaner segmentation.
+ */
 export function CommentaryHeader({
   verseRef,
-  activeTab,
-  setActiveTab,
   languageMode,
   setLanguageMode,
   showFootnotes,
   setShowFootnotes,
   onClose,
-  hasUser,
 }: CommentaryHeaderProps) {
   return (
-    <div className="flex flex-col bg-paper/95 backdrop-blur border-b border-pencil/10 shrink-0">
-      <div className="flex items-center justify-between px-6 py-4">
+    <div className="flex flex-col bg-paper/95 backdrop-blur border-b border-pencil/10 shrink-0 z-30">
+      <div className="flex items-center justify-between px-6 py-5">
         <div className="flex flex-col text-left">
-          <h3 className="font-serif font-bold text-xl text-ink">Commentary</h3>
-          <p className="text-xs text-pencil font-mono mt-0.5">{verseRef}</p>
+          <h3 className="font-serif font-bold text-xl text-ink tracking-tight">
+            Commentary
+          </h3>
+          <p className="text-[10px] text-gold font-black uppercase tracking-[0.2em] mt-0.5">
+            {verseRef}
+          </p>
         </div>
+
         <div className="flex items-center gap-2">
+          {/* Toggle Footnotes/Inline Notes */}
           <button
             onClick={() => setShowFootnotes(!showFootnotes)}
             className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center transition-all",
-              showFootnotes ? "bg-gold text-white" : "bg-pencil/5 text-pencil"
+              "w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-75",
+              showFootnotes
+                ? "bg-gold text-white shadow-lg shadow-gold/20"
+                : "bg-pencil/5 text-pencil hover:bg-pencil/10"
             )}
+            title="Toggle Footnotes"
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-4.5 h-4.5" />
           </button>
+
+          {/* Language Selector Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="px-3 py-1.5 rounded-full bg-pencil/5 text-xs font-bold text-pencil uppercase flex items-center gap-1.5">
+              <button className="h-9 px-3 rounded-full bg-pencil/5 hover:bg-pencil/10 transition-colors text-[10px] font-black text-pencil uppercase flex items-center gap-1.5 outline-none">
                 {languageMode === "bilingual"
-                  ? "Bi"
+                  ? "Bilingual"
                   : languageMode === "en"
-                  ? "En"
-                  : "He"}
-                <ChevronDown className="w-3 h-3 opacity-50" />
+                  ? "English"
+                  : "Hebrew"}
+                <ChevronDown className="w-3 h-3 opacity-40" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent
+              align="end"
+              className="w-36 rounded-2xl p-1.5 shadow-xl border-pencil/10 bg-paper/95 backdrop-blur-xl"
+            >
               {(["en", "he", "bilingual"] as const).map((m) => (
                 <DropdownMenuItem
                   key={m}
                   onClick={() => setLanguageMode(m)}
-                  className="text-xs font-medium cursor-pointer uppercase"
+                  className={cn(
+                    "flex items-center justify-between rounded-lg px-2.5 py-2 text-[10px] font-bold uppercase tracking-widest cursor-pointer transition-colors",
+                    languageMode === m
+                      ? "bg-pencil/10 text-ink"
+                      : "text-pencil/60 hover:bg-pencil/5"
+                  )}
                 >
-                  {m}{" "}
-                  {languageMode === m && <Check className="w-3 h-3 ml-auto" />}
+                  {m === "en" ? "English" : m === "he" ? "Hebrew" : "Bilingual"}
+                  {languageMode === m && (
+                    <Check className="w-3 h-3 text-gold" />
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <div className="w-px h-4 bg-pencil/10 mx-1" />
+
+          {/* Close Sidebar */}
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-pencil/10 transition-colors"
+            className="p-2 rounded-full hover:bg-pencil/10 transition-all active:scale-75 group"
           >
-            <X className="w-5 h-5 text-pencil" />
+            <X className="w-5 h-5 text-pencil group-hover:text-ink" />
           </button>
         </div>
-      </div>
-      <div className="flex px-6 pb-0 gap-6">
-        {(["MY_COMMENTARIES", "MARKETPLACE", "DISCUSSION"] as const).map(
-          (tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "pb-3 text-sm font-bold border-b-2 transition-all",
-                activeTab === tab
-                  ? "text-ink border-gold"
-                  : "text-pencil border-transparent hover:text-ink/70"
-              )}
-            >
-              {tab === "MY_COMMENTARIES"
-                ? "Library"
-                : tab === "DISCUSSION"
-                ? "Groups"
-                : "Explore"}
-            </button>
-          )
-        )}
-        {hasUser && (
-          <button
-            onClick={() => setActiveTab("MANAGE_BOOKS")}
-            className={cn(
-              "pb-3 text-sm font-bold border-b-2 transition-all ml-auto",
-              activeTab === "MANAGE_BOOKS"
-                ? "text-ink border-gold"
-                : "text-pencil border-transparent"
-            )}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        )}
       </div>
     </div>
   );

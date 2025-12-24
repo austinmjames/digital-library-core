@@ -1,6 +1,6 @@
 "use client";
 
-import { Navigation, Edit2, Save } from "lucide-react";
+import { Navigation, Edit, Save } from "lucide-react";
 
 interface LocationHeaderProps {
   isEditing: boolean;
@@ -45,7 +45,7 @@ export function LocationHeader({
         {isEditing ? (
           <Save className="w-3 h-3" />
         ) : (
-          <Edit2 className="w-3 h-3" />
+          <Edit className="w-3 h-3" />
         )}
       </button>
     </div>

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { X, Globe, Library } from "lucide-react";
 import { cn } from "@/lib/utils";
-import ManagementView from "@/components/reader/translations/ManagementView";
-import MarketplaceView from "@/components/reader/translations/MarketplaceView";
+// Ensure named imports are used
+import { ManagementView } from "@/components/reader/translations/ManagementView";
+import { MarketplaceView } from "@/components/reader/translations/MarketplaceView";
 
 interface TranslationPanelProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ type PanelTab = "MY_VERSIONS" | "MARKETPLACE";
 
 /**
  * TranslationPanel
- * Fixed: Removed unused 'Button' import and ensured sub-view imports are absolute or clear.
+ * Fixed: Explicitly typed the onSelect callback for MarketplaceView.
  */
 export function TranslationPanel({
   isOpen,
@@ -86,7 +87,7 @@ export function TranslationPanel({
             onSelect={onSelectVersion}
           />
         ) : (
-          <MarketplaceView onSelect={onSelectVersion} />
+          <MarketplaceView onSelect={(id: string) => onSelectVersion(id)} />
         )}
       </div>
 

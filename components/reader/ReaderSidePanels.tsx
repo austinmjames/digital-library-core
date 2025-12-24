@@ -21,6 +21,7 @@ interface ReaderSidePanelsProps {
   setIsTodayOpen: (open: boolean) => void;
   activeLayerId: string;
   setActiveLayerId: (id: string) => void;
+  // Validating these exist
   editingVerse: Verse | null;
   setEditingVerse: (verse: Verse | null) => void;
   bookSlug?: string;
