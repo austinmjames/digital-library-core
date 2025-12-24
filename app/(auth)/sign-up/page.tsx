@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+
 import SignUpForm from "@/components/auth/sign-up-form";
 
 /**
  * app/(auth)/sign-up/page.tsx
- * Updated to use the default import for SignUpForm to resolve module resolution errors.
+ * Added force-dynamic to prevent Vercel build-time Supabase errors.
  */
 export default function SignUpPage() {
   return (
