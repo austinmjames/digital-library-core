@@ -1,6 +1,13 @@
 "use client";
 
-import { Library, ChevronDown, Settings2, Globe, Calendar } from "lucide-react";
+import {
+  Library,
+  ChevronDown,
+  Settings2,
+  Globe,
+  Calendar,
+  User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,22 +19,24 @@ import { DisplayModeGrid } from "./DisplayModeGrid";
 import { TranslationSelector } from "./TranslationSelector";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/context/auth-context";
+import Link from "next/link";
 
 interface ReaderHeaderProps {
   activeBook: string;
   activeChapter: number;
   onOpenNav: () => void;
   onOpenTranslations: () => void;
-  onToggleToday: () => void; // Renamed to clarify toggle behavior
-  isTodayActive?: boolean; // New prop to track if the Today menu is currently revealed
+  onToggleToday: () => void;
+  isTodayActive?: boolean;
   activeVersionId: string;
   onSelectVersion: (id: string) => void;
 }
 
 /**
  * ReaderHeader
- * Fixed: Today icon is gray (text-pencil).
- * Enhanced: Support for toggling (reveal/dismiss) the Daily Study menu.
+ * Main navigation and settings bar for the reading experience.
+ * Updated to include the User Profile trigger for authenticated users.
  */
 export function ReaderHeader({
   activeBook,
@@ -39,6 +48,8 @@ export function ReaderHeader({
   activeVersionId,
   onSelectVersion,
 }: ReaderHeaderProps) {
+  const { user, isLoading: authLoading } = useAuth();
+
   return (
     <header className="sticky top-0 z-40 w-full bg-paper/80 backdrop-blur-xl border-b border-pencil/10 px-4 h-14 flex items-center justify-between transition-colors duration-500">
       <div className="flex items-center">
@@ -57,7 +68,7 @@ export function ReaderHeader({
       </div>
 
       <div className="flex items-center gap-1">
-        {/* Today/Daily Study Trigger - Gray icon (text-pencil) with toggle logic */}
+        {/* Daily Study / Calendar Trigger */}
         <Button
           variant="ghost"
           size="icon"
@@ -71,6 +82,7 @@ export function ReaderHeader({
           <Calendar className="w-5 h-5" />
         </Button>
 
+        {/* Translation Layer Trigger */}
         <Button
           variant="ghost"
           size="icon"
@@ -80,6 +92,7 @@ export function ReaderHeader({
           <Globe className="w-5 h-5 text-pencil" />
         </Button>
 
+        {/* Settings / Appearance Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -105,6 +118,20 @@ export function ReaderHeader({
             <AppearanceSettings />
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* User Profile Access */}
+        {!authLoading && user && (
+          <Link href="/profile">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-10 h-10 rounded-full border border-pencil/10 bg-white/50 hover:bg-white transition-all active:scale-95 ml-1"
+              title="Profile"
+            >
+              <User className="w-5 h-5 text-pencil" />
+            </Button>
+          </Link>
+        )}
       </div>
     </header>
   );
