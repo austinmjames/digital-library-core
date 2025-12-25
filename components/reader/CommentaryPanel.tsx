@@ -10,7 +10,8 @@ import { NoteEditor } from "./commentary/AddNoteView";
 import { ManagementView } from "./commentary/ManagementView";
 import { DiscussionView } from "./commentary/DiscussionView";
 import { LibraryView } from "./commentary/LibraryView";
-import { Loader2, MessageSquarePlus } from "lucide-react";
+import { AuthPrompt } from "@/components/auth/AuthPrompt";
+import { MessageSquarePlus } from "lucide-react";
 
 interface CommentaryPanelProps {
   verseRef: string | null;
@@ -19,7 +20,8 @@ interface CommentaryPanelProps {
 /**
  * components/reader/CommentaryPanel.tsx
  * Orchestrator for the right-side commentary system.
- * Restored working logic for note viewing/editing while maintaining high-fidelity UI.
+ * Updated: Removed the global auth gate so guests can view Classic/Library commentary.
+ * Fixed: Ensured triggers and props align with LibraryView authentication rules.
  */
 export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
   const { state, actions, supabase } = useCommentaryPanel(verseRef);
@@ -28,7 +30,6 @@ export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
   const isAdding = viewMode === "ADD_NOTE";
 
   // Reset view mode and clear editing buffers whenever the selected verse changes
-  // to ensure the user always starts fresh on a new selection.
   useEffect(() => {
     setViewMode("BROWSE");
     actions.setEditingNoteId(undefined);
@@ -37,12 +38,8 @@ export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
   }, [verseRef]);
 
   const handleSaveNote = async (content: string, collection: string) => {
-    try {
-      await actions.handleSaveNote(content, collection);
-      setViewMode("BROWSE");
-    } catch (err) {
-      console.error("Save failure:", err);
-    }
+    await actions.handleSaveNote(content, collection);
+    setViewMode("BROWSE");
   };
 
   const handleTriggerEdit = useCallback(
@@ -68,25 +65,8 @@ export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
     [actions]
   );
 
-  // Loading State for initial hydration
-  // Logic adjustment: Only block if loading AND we have absolutely no data structure yet.
-  // If groupedData exists (even if empty keys), we should proceed to render so empty states can show.
-  if (state.loading && !state.groupedData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-paper gap-4 opacity-30">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-        <p className="text-[10px] font-black uppercase tracking-[0.2em]">
-          Consulting Sages...
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full bg-paper animate-in fade-in duration-300 overflow-hidden relative">
-      {/* HEADER LOGIC:
-        Toggle headers based on viewMode. 'ADD_NOTE' uses a specialized sub-header.
-      */}
       {!isAdding && (
         <CommentaryHeader
           title="Commentary"
@@ -120,86 +100,100 @@ export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
             hasUser={!!state.user}
           />
 
-          <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 pb-32">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 pb-20">
+            {/* Multi-view Router */}
             {state.activeTab === "MANAGE_BOOKS" ? (
-              <ManagementView
-                collections={state.collections}
-                onBack={() => actions.setActiveTab("MY_COMMENTARIES")}
-                onRename={async (old, newN) => {
-                  await supabase
-                    .from("commentary_collections")
-                    .update({ name: newN })
-                    .eq("owner_id", state.user?.id)
-                    .eq("name", old);
-                  await actions.refetch();
-                }}
-                onDelete={async (name) => {
-                  if (
-                    window.confirm(`Delete "${name}" and all its contents?`)
-                  ) {
+              state.user ? (
+                <ManagementView
+                  collections={state.collections}
+                  onBack={() => actions.setActiveTab("MY_COMMENTARIES")}
+                  onRename={async (old, newN) => {
                     await supabase
                       .from("commentary_collections")
-                      .delete()
+                      .update({ name: newN })
                       .eq("owner_id", state.user?.id)
-                      .eq("name", name);
+                      .eq("name", old);
                     await actions.refetch();
-                  }
-                }}
-                onCreate={actions.handleCreateCollection}
-                onImport={async (code: string) => {
-                  const { data } = await supabase
-                    .from("commentary_collections")
-                    .select("id")
-                    .eq("share_code", code.toUpperCase())
-                    .single();
+                  }}
+                  onDelete={async (name) => {
+                    if (
+                      window.confirm(`Delete "${name}" and all its contents?`)
+                    ) {
+                      await supabase
+                        .from("commentary_collections")
+                        .delete()
+                        .eq("owner_id", state.user?.id)
+                        .eq("name", name);
+                      await actions.refetch();
+                    }
+                  }}
+                  onCreate={actions.handleCreateCollection}
+                  onImport={async (code: string) => {
+                    const { data } = await supabase
+                      .from("commentary_collections")
+                      .select("id")
+                      .eq("share_code", code.toUpperCase())
+                      .single();
 
-                  if (!data || !state.user?.email) return false;
+                    if (!data || !state.user?.email) return false;
 
-                  await supabase.from("collection_collaborators").upsert({
-                    collection_id: data.id,
-                    user_email: state.user.email,
-                    permission: "viewer",
-                    is_in_library: true,
-                  });
-                  await actions.refetch();
-                  return true;
-                }}
-                onShare={async (name, email, perm) => {
-                  const coll = state.collections.find((c) => c.name === name);
-                  if (coll) {
                     await supabase.from("collection_collaborators").upsert({
-                      collection_id: coll.id,
-                      user_email: email,
-                      permission: perm,
+                      collection_id: data.id,
+                      user_email: state.user.email,
+                      permission: "viewer",
                       is_in_library: true,
                     });
                     await actions.refetch();
-                  }
-                }}
-                onStopCollaborating={async (collectionId: string) => {
-                  if (
-                    window.confirm(
-                      "Stop collaborating on this book? It will be removed from your library."
-                    )
-                  ) {
-                    await supabase
-                      .from("collection_collaborators")
-                      .delete()
-                      .eq("collection_id", collectionId)
-                      .eq("user_email", state.user?.email);
-                    await actions.refetch();
-                  }
-                }}
-              />
+                    return true;
+                  }}
+                  onShare={async (name, email, perm) => {
+                    const coll = state.collections.find((c) => c.name === name);
+                    if (coll) {
+                      await supabase.from("collection_collaborators").upsert({
+                        collection_id: coll.id,
+                        user_email: email,
+                        permission: perm,
+                        is_in_library: true,
+                      });
+                      await actions.refetch();
+                    }
+                  }}
+                  onStopCollaborating={async (collectionId: string) => {
+                    if (
+                      window.confirm(
+                        "Stop collaborating on this book? It will be removed from your library."
+                      )
+                    ) {
+                      await supabase
+                        .from("collection_collaborators")
+                        .delete()
+                        .eq("collection_id", collectionId)
+                        .eq("user_email", state.user?.email);
+                      await actions.refetch();
+                    }
+                  }}
+                />
+              ) : (
+                <div className="py-12">
+                  <AuthPrompt
+                    title="Manage Your Library"
+                    description="Sign in to establish personal books, import shared collections, and manage your authored wisdom."
+                  />
+                </div>
+              )
             ) : state.activeTab === "DISCUSSION" ? (
-              <DiscussionView verseRef={verseRef || ""} user={state.user} />
+              state.user ? (
+                <DiscussionView verseRef={verseRef || ""} user={state.user} />
+              ) : (
+                <div className="py-12">
+                  <AuthPrompt
+                    title="Join the Global Seder"
+                    description="Authenticate to participate in real-time verse discussions and collaborate with scholars around the world."
+                  />
+                </div>
+              )
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* Simplified Conditional:
-                  If no verseRef is selected, show the empty state prompt.
-                  Otherwise, render the LibraryView immediately. 
-                  The LibraryView internally handles empty data states if needed.
-                */}
                 {!verseRef ? (
                   <div className="py-24 flex flex-col items-center justify-center text-center opacity-20 italic space-y-4">
                     <div className="w-16 h-16 rounded-[2rem] bg-pencil/5 flex items-center justify-center border border-pencil/10">
@@ -211,6 +205,7 @@ export function CommentaryPanel({ verseRef }: CommentaryPanelProps) {
                   </div>
                 ) : (
                   <LibraryView
+                    user={state.user}
                     groupedData={state.groupedData}
                     collections={state.collections}
                     languageMode={state.languageMode}

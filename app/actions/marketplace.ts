@@ -6,26 +6,33 @@ import { MarketplaceItem } from "@/lib/types/library";
 
 /**
  * fetchMarketplaceItems
- * Retrieves ranked translations or commentaries based strictly on popularity (installs).
+ * Retrieves ranked items and checks installation status.
  */
 export async function fetchMarketplaceItems(
-  type: "translation" | "commentary"
+  type: "translation" | "commentary" | "book"
 ): Promise<MarketplaceItem[]> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const table =
-    type === "translation" ? "translation_versions" : "commentary_collections";
+    type === "translation"
+      ? "translation_versions"
+      : type === "book"
+      ? "library_books"
+      : "commentary_collections";
+
+  const linkTable =
+    type === "translation"
+      ? "collection_collaborators"
+      : "commentary_library_links";
+  const linkIdCol = type === "translation" ? "collection_id" : "commentary_id";
 
   const { data, error } = await supabase
     .from(table)
     .select(
-      `
-      id, 
-      title, 
-      description, 
-      author_display_name,
-      is_system,
-      install_count
-    `
+      "id, title, description, author_display_name, is_system, install_count, status"
     )
     .eq("status", "public")
     .order("is_system", { ascending: false })
@@ -33,30 +40,47 @@ export async function fetchMarketplaceItems(
 
   if (error) throw error;
 
-  return (data || []).map((item) => ({
-    id: item.id,
+  const installedIds = new Set<string>();
+  if (user) {
+    const { data: installs } = await supabase
+      .from(linkTable)
+      .select(linkIdCol)
+      .eq("user_id", user.id);
+
+    if (installs) {
+      installs.forEach((i: Record<string, string>) =>
+        installedIds.add(i[linkIdCol])
+      );
+    }
+  }
+
+  // Map to strictly typed MarketplaceItem
+  const results: MarketplaceItem[] = (data || []).map((item: any) => ({
+    id: item.id || item.slug,
     type,
-    name: item.title,
+    name: item.title || item.name,
     description: item.description,
     author_name: item.author_display_name,
-    install_count: item.install_count || 0,
+    install_count: Number(item.install_count || 0),
     is_system: item.is_system,
+    is_installed: installedIds.has(item.id || item.slug),
   }));
+
+  return results;
 }
 
 /**
  * installMarketplaceItem
- * Connects a community project to the user's personal library.
  */
 export async function installMarketplaceItem(
   id: string,
-  type: "translation" | "commentary"
+  type: "translation" | "commentary" | "book"
 ) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("Auth required");
+  if (!user) return { success: false, error: "Auth required" };
 
   const table =
     type === "translation"
@@ -64,7 +88,7 @@ export async function installMarketplaceItem(
       : "commentary_library_links";
   const idColumn = type === "translation" ? "collection_id" : "commentary_id";
 
-  const { error } = await supabase.from(table).upsert({
+  const { error: linkError } = await supabase.from(table).upsert({
     [idColumn]: id,
     user_email: user.email,
     user_id: user.id,
@@ -72,9 +96,8 @@ export async function installMarketplaceItem(
     is_in_library: true,
   });
 
-  if (error) throw error;
+  if (linkError) return { success: false, error: linkError.message };
 
-  // Use the RPC function to increment the global popularity count
   const sourceTable =
     type === "translation" ? "translation_versions" : "commentary_collections";
   await supabase.rpc("increment_install_count", {
@@ -87,20 +110,44 @@ export async function installMarketplaceItem(
 }
 
 /**
- * reportContent
- * Moderation trigger for inappropriate community content.
+ * uninstallMarketplaceItem
+ * Logic to remove a library link.
  */
+export async function uninstallMarketplaceItem(
+  id: string,
+  type: "translation" | "commentary" | "book"
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Auth required" };
+
+  const table =
+    type === "translation"
+      ? "collection_collaborators"
+      : "commentary_library_links";
+  const idColumn = type === "translation" ? "collection_id" : "commentary_id";
+
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq("user_id", user.id)
+    .eq(idColumn, id);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/library");
+  return { success: true };
+}
+
 export async function reportContent(id: string, reason: string) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  await supabase.from("content_reports").insert({
-    content_id: id,
-    reporter_id: user?.id,
-    reason,
-  });
-
+  await supabase
+    .from("content_reports")
+    .insert({ content_id: id, reporter_id: user?.id, reason });
   return { success: true };
 }

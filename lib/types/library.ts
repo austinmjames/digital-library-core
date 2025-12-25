@@ -61,9 +61,10 @@ export interface UserTranslation {
 
 // --- Navigation & Grouping ---
 
+// Updated "Library" to "Community"
 export type CommentaryGroup =
   | "My Commentary"
-  | "Library"
+  | "Community"
   | "Classics"
   | "Modern Rabbis";
 

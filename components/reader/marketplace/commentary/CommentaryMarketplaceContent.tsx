@@ -12,16 +12,20 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarketplaceItem } from "@/lib/types/library";
-import { useCommentaryMarketplace } from "./commentary/useCommentaryMarketplace";
-import { MarketplaceBookCard } from "./shared/MarketplaceBookCard";
+import { useCommentaryMarketplace } from "./useCommentaryMarketplace";
+import { MarketplaceBookCard } from "../shared/MarketplaceBookCard";
 
 interface CommentaryMarketplaceContentProps {
   items: MarketplaceItem[];
   loading: boolean;
-  onInstall: (id: string, type: "translation" | "commentary") => Promise<void>;
+  onInstall: (id: string) => Promise<void>;
   onAuthorClick: (name: string) => void;
 }
 
+/**
+ * marketplace/commentary/CommentaryMarketplaceContent.tsx
+ * Fixed: Escaped quotes for JSX and standardized onInstall prop to single argument.
+ */
 export function CommentaryMarketplaceContent({
   items,
   loading,
@@ -77,7 +81,7 @@ export function CommentaryMarketplaceContent({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto no-scrollbar p-8 space-y-4 pb-32">
-          {state.filteredItems.map((item) => (
+          {state.filteredItems.map((item: MarketplaceItem) => (
             <MarketplaceBookCard
               key={item.id}
               item={item}
@@ -85,6 +89,11 @@ export function CommentaryMarketplaceContent({
               onAuthorClick={onAuthorClick}
             />
           ))}
+          {state.filteredItems.length === 0 && (
+            <div className="py-20 text-center opacity-30 italic text-sm">
+              No matches found for &ldquo;{state.searchQuery}&rdquo;
+            </div>
+          )}
         </div>
       </div>
     );
@@ -100,7 +109,7 @@ export function CommentaryMarketplaceContent({
         <header className="px-8 py-6 border-b border-pencil/5 flex items-center gap-4 shrink-0 bg-paper/90 backdrop-blur-md">
           <button
             onClick={actions.handleBack}
-            className="p-2 -ml-2 rounded-full hover:bg-pencil/5 text-pencil outline-none"
+            className="p-2 -ml-2 rounded-full hover:bg-pencil/5 text-pencil outline-none active:scale-75"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -109,7 +118,7 @@ export function CommentaryMarketplaceContent({
           </h3>
         </header>
         <div className="flex-1 overflow-y-auto no-scrollbar p-8 space-y-4 pb-32">
-          {list.map((item) => (
+          {list.map((item: MarketplaceItem) => (
             <MarketplaceBookCard
               key={item.id}
               item={item}
@@ -165,7 +174,7 @@ export function CommentaryMarketplaceContent({
                 </button>
               </header>
               <div className="space-y-4">
-                {top3.map((item) => (
+                {top3.map((item: MarketplaceItem) => (
                   <MarketplaceBookCard
                     key={item.id}
                     item={item}

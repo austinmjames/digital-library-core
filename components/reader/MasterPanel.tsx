@@ -37,7 +37,8 @@ interface MasterPanelProps {
 
 /**
  * components/reader/MasterPanel.tsx
- * Updated: Increased panel width for better readability and touch targets.
+ * Updated: Increased panel width and applied 'indented' aesthetic using
+ * an inner left shadow and distinct border.
  */
 export function MasterPanel({
   isOpen,
@@ -69,8 +70,9 @@ export function MasterPanel({
 
       <aside
         className={cn(
-          // Increased widths: md:w-[480px] lg:w-[550px]
-          "fixed top-0 right-0 h-full w-full md:w-[480px] lg:w-[550px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden",
+          "fixed top-0 right-0 h-full w-full md:w-[480px] lg:w-[550px] bg-paper z-50 transition-transform duration-500 ease-spring flex flex-col overflow-hidden",
+          // Indented effect: Inner left shadow + border-l
+          "border-l border-pencil/15 shadow-[inset_12px_0_20px_-10px_rgba(0,0,0,0.08)]",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >

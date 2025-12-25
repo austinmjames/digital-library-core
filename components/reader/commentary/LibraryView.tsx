@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -9,6 +9,7 @@ import {
   BookOpen,
   Crown,
   User,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -18,8 +19,11 @@ import {
   CommentaryGroup,
 } from "@/lib/types/library";
 import { CommentaryEntry } from "./CommentaryEntry";
+import { AuthPrompt } from "@/components/auth/AuthPrompt";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface LibraryViewProps {
+  user: SupabaseUser | null;
   groupedData: Record<
     CommentaryGroup,
     Record<string, (Commentary | UserCommentary)[]>
@@ -35,19 +39,14 @@ interface LibraryViewProps {
 /**
  * components/reader/commentary/LibraryView.tsx
  * Updated:
- * - Supports 4 distinct groups: My Commentary, Classics, Modern Rabbis, Library.
- * - All groups expanded by default.
- * - Authors/Books collapsed by default.
+ * - Wrapped 'shouldExpandPersonal' in useCallback to resolve dependency warnings.
+ * - Smart default expansion for "My Commentary" based on auth and note presence.
+ * - Auto-collapses when switching to a verse without notes (for auth users).
+ * - Auto-expands for unauth users to prompt log-in.
  */
 export function LibraryView({
+  user,
   groupedData,
-  // collections prop is kept for potential future use or passed down if needed,
-  // currently it was unused in the provided snippet but might be needed for logic.
-  // To avoid unused var error, we can remove it if truly unused or comment it out.
-  // However, I'll keep it in props interface but not destructure it if unused,
-  // or use it if logic requires checking collection metadata.
-  // Actually, checking original code, it WAS used to find collMeta.
-  // I will ensure it is used.
   collections,
   languageMode,
   showFootnotes,
@@ -55,20 +54,39 @@ export function LibraryView({
   onEditNote,
   onDeleteNote,
 }: LibraryViewProps) {
-  // Initialize all groups as expanded
+  // Logic to determine if "My Commentary" should be expanded by default
+  // Wrapped in useCallback to prevent unnecessary effect re-runs and fix dependency warning
+  const shouldExpandPersonal = useCallback(() => {
+    if (!user) return true; // Unauth users see the prompt expanded
+    const personalNotes = groupedData["My Commentary"] || {};
+    return Object.keys(personalNotes).length > 0; // Auth users only see it open if notes exist
+  }, [user, groupedData]);
+
+  // State for group expansion
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    {
-      "My Commentary": true,
+    () => ({
+      "My Commentary": shouldExpandPersonal(),
       Classics: true,
       "Modern Rabbis": true,
       Library: true,
-    }
+    })
   );
 
   // Commentators/Books start collapsed
   const [expandedCommentators, setExpandedCommentators] = useState<
     Record<string, boolean>
   >({});
+
+  // Sync "My Commentary" expansion state when the data changes (e.g., clicking a new verse)
+  // This ensures the "by default" logic applies per-verse.
+  useEffect(() => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      "My Commentary": shouldExpandPersonal(),
+    }));
+    // We also collapse all authors when the data changes to keep it tidy
+    setExpandedCommentators({});
+  }, [shouldExpandPersonal]);
 
   const groupConfig = [
     {
@@ -92,14 +110,12 @@ export function LibraryView({
       {groupConfig.map((group) => {
         const groupName = group.id as CommentaryGroup;
         const authors = groupedData[groupName];
-
-        // Safety check if authors is undefined (though type says it shouldn't be)
         if (!authors) return null;
 
         const authorKeys = Object.keys(authors);
         const isPersonalGroup = groupName === "My Commentary";
 
-        // Show group if it has content OR if it's "My Commentary" (to allow adding notes)
+        // Show group if it has content OR if it's the personal group (to show Empty state or Auth prompt)
         if (authorKeys.length === 0 && !isPersonalGroup) return null;
 
         const isGroupExpanded = expandedGroups[groupName];
@@ -127,7 +143,8 @@ export function LibraryView({
                 )}
               </button>
 
-              {isPersonalGroup && (
+              {/* Guarded Add Note Button in Header */}
+              {isPersonalGroup && user && (
                 <button
                   onClick={onAddClick}
                   className="w-7 h-7 rounded-full bg-pencil/5 hover:bg-ink hover:text-white flex items-center justify-center text-pencil transition-all active:scale-90"
@@ -140,22 +157,46 @@ export function LibraryView({
 
             {isGroupExpanded && (
               <div className="space-y-4">
-                {isPersonalGroup && authorKeys.length === 0 && (
-                  <div className="py-8 text-center opacity-40">
-                    <p className="text-xs font-serif italic">
-                      No personal notes on this verse yet.
-                    </p>
-                  </div>
-                )}
+                {/* --- Personal Section States --- */}
+                {isPersonalGroup &&
+                  authorKeys.length === 0 &&
+                  (user ? (
+                    /* 1. Authenticated: Stylized "No Notes" prompt matching AuthPrompt design */
+                    <div className="flex flex-col items-center justify-center text-center p-8 rounded-[2.5rem] bg-pencil/[0.02] border-2 border-dashed border-pencil/10 space-y-6 animate-in fade-in zoom-in-95 duration-700">
+                      <div className="w-16 h-16 rounded-[2rem] bg-paper shadow-sm border border-pencil/5 flex items-center justify-center">
+                        <StickyNote className="w-7 h-7 text-emerald-500/40" />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="font-serif font-bold text-xl text-ink leading-tight">
+                          No Notes
+                        </h3>
+                        <p className="text-sm text-pencil/60 max-w-[240px] mx-auto leading-relaxed italic">
+                          You have not created any notes for this verse yet.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={onAddClick}
+                        className="w-full h-12 bg-ink text-paper rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Note
+                      </button>
+                    </div>
+                  ) : (
+                    /* 2. Guest View: Auth Prompt instead of "No Notes" / Add Note Button */
+                    <AuthPrompt
+                      className="py-10 border-emerald-500/10 bg-emerald-500/[0.01]"
+                      title="Your Personal Sanctuary"
+                      description="Sign in to capture your own insights and start your commentary collection for this verse."
+                      ctaLabel="Sign In to Start Writing"
+                    />
+                  ))}
 
                 {authorKeys.map((author) => {
                   const isExpanded = expandedCommentators[author] || false;
-                  // For personal notes, 'author' is actually the collection name
                   const itemCount = authors[author].length;
-
-                  // Use 'collections' to find metadata about this author/collection if needed
-                  // This fixes the 'unused variable' error by using it (even if logically optional for display)
-                  // In a real app, we might check if this collection is collaborative here.
                   const collMeta = collections.find((c) => c.name === author);
 
                   return (
@@ -224,7 +265,6 @@ export function LibraryView({
                                   ? (item as UserCommentary).user_name
                                   : "unnamed"
                               }
-                              // Use collMeta to determine collaborative status if available
                               isCollaborative={!!collMeta?.is_collaborative}
                               authorName={author}
                               languageMode={languageMode}

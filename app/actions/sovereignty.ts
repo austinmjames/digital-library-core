@@ -5,8 +5,71 @@ import { revalidatePath } from "next/cache";
 import { UserTranslation, AuthorMetadata } from "@/lib/types/library";
 
 /**
- * saveVerseTranslation
+ * deleteCommentaryBook
+ * If a user deletes a commentary book they created:
+ * 1. It is removed from the commentary_collections table (effective Unpublish).
+ * 2. All user_commentaries linked to it are removed.
  */
+export async function deleteCommentaryBook(bookId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  // 1. Ownership Guard
+  const { data: book, error: fetchError } = await supabase
+    .from("commentary_collections")
+    .select("owner_id, name")
+    .eq("id", bookId)
+    .single();
+
+  if (fetchError || !book) return { success: false, error: "Book not found" };
+  if (book.owner_id !== user.id) return { success: false, error: "Forbidden" };
+
+  // 2. Atomic Cleanup
+  const { error: deleteError } = await supabase
+    .from("commentary_collections")
+    .delete()
+    .eq("id", bookId);
+
+  if (deleteError) return { success: false, error: deleteError.message };
+
+  revalidatePath("/library");
+  return { success: true };
+}
+
+/**
+ * deleteTranslationProject
+ * Safely removes a interpretation layer from the database and marketplace.
+ */
+export async function deleteTranslationProject(projectId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: project } = await supabase
+    .from("translation_versions")
+    .select("owner_id")
+    .eq("id", projectId)
+    .single();
+
+  if (!project || project.owner_id !== user.id)
+    return { success: false, error: "Forbidden" };
+
+  const { error } = await supabase
+    .from("translation_versions")
+    .delete()
+    .eq("id", projectId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/library");
+  return { success: true };
+}
+
 export async function saveVerseTranslation(translation: UserTranslation) {
   const supabase = await createClient();
   const {
@@ -30,10 +93,6 @@ export async function saveVerseTranslation(translation: UserTranslation) {
   return { success: true };
 }
 
-/**
- * updateProjectMetadata
- * Allows authors to edit the 160-char description and public author name.
- */
 export async function updateProjectMetadata(
   id: string,
   type: "translation" | "commentary",
@@ -57,9 +116,6 @@ export async function updateProjectMetadata(
   return { success: true };
 }
 
-/**
- * fetchAuthorMetadata
- */
 export async function fetchAuthorMetadata(
   name: string
 ): Promise<AuthorMetadata | null> {

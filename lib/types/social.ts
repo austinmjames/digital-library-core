@@ -5,7 +5,8 @@
 
 export interface MarketplaceItem {
   id: string;
-  type: "translation" | "commentary";
+  // Updated to include 'book' for Library exploration
+  type: "translation" | "commentary" | "book";
   name: string;
   description?: string;
   author_name?: string;

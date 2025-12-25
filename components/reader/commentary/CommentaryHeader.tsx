@@ -33,7 +33,7 @@ export function CommentaryHeader({
               <MessageSquare className="w-5 h-5 text-accent" />
             </div>
           )}
-          <h3 className="text-xl text-ink font-sans font-bold tracking-tight truncate">
+          <h3 className="text-2xl text-ink font-sans font-bold tracking-tight truncate">
             {title}
           </h3>
         </div>
