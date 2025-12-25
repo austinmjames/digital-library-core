@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/context/auth-context";
 import { useCommentaryData } from "./useCommentaryData";
+import { fetchVerseText, deleteUserCommentary } from "@/app/actions/reader";
 import {
   Commentary,
   UserCommentary,
   CommentaryGroup,
-  CommentaryTab, // Now correctly imported from central types
+  CommentaryTab,
 } from "@/lib/types/library";
 
 /**
  * useCommentaryPanel
- * Master logic hook for the Commentary sidebar.
+ * Logic engine for the Commentary Sidebar.
+ * Manages fetching, grouping, saving, and deleting insights.
  */
 export function useCommentaryPanel(verseRef: string | null) {
   const { user } = useAuth();
@@ -26,10 +28,32 @@ export function useCommentaryPanel(verseRef: string | null) {
     "bilingual"
   );
   const [showFootnotes, setShowFootnotes] = useState(false);
-  const [myAuthors, setMyAuthors] = useState<string[]>(["Rashi", "רש״י"]);
+  const [myAuthors] = useState<string[]>(["Rashi", "רש״י"]);
   const [selectedCollection, setSelectedCollection] =
     useState<string>("My Commentary");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Centralized Editing State for updates
+  const [editingNoteId, setEditingNoteId] = useState<string | undefined>(
+    undefined
+  );
+  const [editingContent, setEditingContent] = useState<string | undefined>(
+    undefined
+  );
+
+  // Verse Source Context for the Editor passage preview
+  const [verseContent, setVerseContent] = useState<{
+    he: string;
+    en: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (verseRef) {
+      fetchVerseText(verseRef).then(setVerseContent);
+    } else {
+      setVerseContent(null);
+    }
+  }, [verseRef]);
 
   const groupedData = useMemo(() => {
     const groups: Record<
@@ -87,38 +111,75 @@ export function useCommentaryPanel(verseRef: string | null) {
   );
 
   const handleSaveNote = useCallback(
-    async (content: string, collectionName: string) => {
+    async (content: string, collectionName: string, noteId?: string) => {
       if (!user || !verseRef) return;
       setIsSaving(true);
+
       try {
-        const parts = verseRef.split(" ");
-        const nums = parts[parts.length - 1].split(":");
+        const parts = verseRef.trim().split(" ");
+        const coords = parts[parts.length - 1].split(":");
         const coll = collections.find((c) => c.name === collectionName);
 
-        await supabase.from("user_commentaries").insert({
+        const payload = {
           user_id: user.id,
           user_email: user.email,
           verse_ref: verseRef,
-          book_slug: parts[0].toLowerCase(),
-          chapter_num: parseInt(nums[0]),
-          verse_num: parseInt(nums[1]),
+          book_slug: parts.slice(0, -1).join("-").toLowerCase(),
+          chapter_num: parseInt(coords[0]),
+          verse_num: parseInt(coords[1]),
           content,
           collection_name: collectionName,
           collection_id: coll?.id !== "default" ? coll?.id : null,
-        });
+        };
+
+        const targetId = noteId || editingNoteId;
+
+        if (targetId) {
+          await supabase
+            .from("user_commentaries")
+            .update(payload)
+            .eq("id", targetId);
+        } else {
+          await supabase.from("user_commentaries").insert(payload);
+        }
+
         await refetch();
+        setEditingNoteId(undefined);
+        setEditingContent(undefined);
       } finally {
         setIsSaving(false);
       }
     },
-    [user, verseRef, collections, supabase, refetch]
+    [user, verseRef, collections, supabase, refetch, editingNoteId]
   );
 
-  const toggleAuthor = useCallback((author: string) => {
-    setMyAuthors((p) =>
-      p.includes(author) ? p.filter((x) => x !== author) : [...p, author]
-    );
-  }, []);
+  const handleDeleteNote = useCallback(
+    async (noteId: string) => {
+      try {
+        await deleteUserCommentary(noteId);
+        await refetch();
+      } catch (err) {
+        console.error("Failed to delete note:", err);
+      }
+    },
+    [refetch]
+  );
+
+  const memoizedActions = useMemo(
+    () => ({
+      setActiveTab,
+      setLanguageMode,
+      setShowFootnotes,
+      setSelectedCollection,
+      setEditingNoteId,
+      setEditingContent,
+      handleCreateCollection,
+      handleSaveNote,
+      handleDeleteNote,
+      refetch,
+    }),
+    [handleCreateCollection, handleSaveNote, handleDeleteNote, refetch]
+  );
 
   return {
     state: {
@@ -132,17 +193,11 @@ export function useCommentaryPanel(verseRef: string | null) {
       collections,
       loading,
       user,
+      verseContent,
+      editingNoteId,
+      editingContent,
     },
-    actions: {
-      setActiveTab,
-      setLanguageMode,
-      setShowFootnotes,
-      setSelectedCollection,
-      handleCreateCollection,
-      handleSaveNote,
-      toggleAuthor,
-      refetch,
-    },
+    actions: memoizedActions,
     supabase,
   };
 }

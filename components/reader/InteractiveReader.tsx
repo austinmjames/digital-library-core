@@ -2,18 +2,19 @@
 
 import { useCallback } from "react";
 import { useTextSettings } from "@/components/context/text-settings-context";
-import { ChapterData, Verse } from "@/lib/types/library";
+import { ChapterData } from "@/lib/types/library";
 import { useReaderInfiniteScroll } from "@/components/hooks/useReaderInfiniteScroll";
 
-// Segmented Hooks & Components
+// Updated Architecture Imports
 import { useReaderPermissions } from "./hooks/useReaderPermissions";
-import { useReaderLayoutState } from "./hooks/useReaderLayoutState";
+import { useMasterPanel } from "./hooks/useMasterPanel";
 import { useTranslationPersistence } from "./hooks/useTranslationPersistence";
 import { useReaderObservers } from "./hooks/useReaderObservers";
 import { ReaderLayout } from "./layout/ReaderLayout";
 import { ReaderContent } from "./layout/ReaderContent";
 import { ReaderHeaderWrapper } from "./layout/ReaderHeaderWrapper";
-import { ReaderSidePanelsWrapper } from "./layout/ReaderSidePanelsWrapper";
+import { MasterPanelWrapper } from "./layout/MasterPanelWrapper";
+import { MasterPanelTrigger } from "./layout/MasterPanelTrigger";
 
 interface InteractiveReaderProps {
   initialChapter: ChapterData;
@@ -21,11 +22,6 @@ interface InteractiveReaderProps {
   activeTranslation?: string;
 }
 
-/**
- * InteractiveReader (Orchestrator)
- * Cohesion point for the reader experience.
- * Updated: Resolved prop-mismatch error for ReaderHeaderWrapper.
- */
 export default function InteractiveReader({
   initialChapter,
   bookSlug,
@@ -33,20 +29,17 @@ export default function InteractiveReader({
 }: InteractiveReaderProps) {
   const { displayMode, fontSize } = useTextSettings();
 
-  // 1. Logic, Persistence & Permissions
   const { activeLayerId, handleSelectLayer } = useTranslationPersistence(
     initialChapter.activeTranslation || "jps-1985",
     activeTranslation
   );
 
-  const { canEdit, isVerifying } = useReaderPermissions(activeLayerId);
-  const layout = useReaderLayoutState(initialChapter);
+  const { canEdit } = useReaderPermissions(activeLayerId);
+  const layout = useMasterPanel(initialChapter);
 
-  // 2. Data Management (Infinite Scroll)
   const { chapters, isLoading, hasPrev, loadMore, loadPrev } =
     useReaderInfiniteScroll(initialChapter, activeLayerId);
 
-  // 3. Observer Management (Chapter Tracking & Scroll triggers)
   const { loaderRef, prevLoaderRef, chapterRefs } = useReaderObservers({
     loadMore,
     loadPrev,
@@ -58,49 +51,25 @@ export default function InteractiveReader({
     },
   });
 
-  /**
-   * handleVerseClick
-   * Coordinates opening the commentary sidebar.
-   */
   const handleVerseClick = useCallback(
     (id: string) => {
-      if (layout.state.selectedVerseRef === id) {
+      if (layout.state.selectedVerseRef === id && layout.state.isPanelOpen) {
+        layout.actions.closePanel();
         layout.actions.clearSelection();
       } else {
-        layout.actions.closeSideMenus();
         layout.setters.setSelectedVerseRef(id);
-        layout.setters.setEditingVerse(null);
+        layout.actions.openPanel("COMMENTARY");
       }
     },
     [layout]
   );
 
-  /**
-   * handleLongPress
-   * Coordinates opening the Sovereignty Editor.
-   */
-  const handleLongPress = useCallback(
-    (v: Verse) => {
-      if (canEdit && !isVerifying) {
-        layout.actions.closeSideMenus();
-        layout.setters.setEditingVerse(v);
-        layout.setters.setSelectedVerseRef(null);
-      }
-    },
-    [canEdit, isVerifying, layout]
-  );
-
   return (
     <ReaderLayout
       isPanelOpen={layout.state.isPanelOpen}
-      header={
-        <ReaderHeaderWrapper
-          layout={layout}
-          // Legacy translation props removed to resolve TypeScript error
-        />
-      }
+      header={<ReaderHeaderWrapper layout={layout} />}
       sidePanels={
-        <ReaderSidePanelsWrapper
+        <MasterPanelWrapper
           layout={layout}
           activeLayerId={activeLayerId}
           onSelectLayer={handleSelectLayer}
@@ -108,6 +77,11 @@ export default function InteractiveReader({
         />
       }
     >
+      <MasterPanelTrigger
+        isOpen={layout.state.isPanelOpen}
+        onClick={layout.actions.togglePanel}
+      />
+
       <ReaderContent
         displayMode={displayMode}
         fontSize={fontSize}
@@ -120,7 +94,7 @@ export default function InteractiveReader({
         selectedVerseRef={layout.state.selectedVerseRef}
         canEdit={canEdit}
         onVerseClick={handleVerseClick}
-        onVerseLongPress={handleLongPress}
+        onVerseLongPress={() => {}}
       />
     </ReaderLayout>
   );

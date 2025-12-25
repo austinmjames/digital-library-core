@@ -4,11 +4,97 @@ import { createClient } from "@/lib/supabase/server";
 import { ChapterData, Verse } from "@/lib/types/library";
 import { processText } from "@/lib/text-utils";
 import { TRANSLATION_MAP } from "@/lib/constants";
+import { revalidatePath } from "next/cache";
+
+/**
+ * Interface for raw database rows from text_versions
+ */
+interface TextVersionRow {
+  c2_index: number;
+  content: string;
+}
+
+/**
+ * fetchVerseText
+ * Retrieves the Hebrew and primary English text for a specific verse reference.
+ */
+export async function fetchVerseText(verseRef: string) {
+  const supabase = await createClient();
+
+  const parts = verseRef.trim().split(" ");
+  const coords = parts[parts.length - 1].split(":");
+  const bookName = parts.slice(0, -1).join(" ");
+  const chapter = parseInt(coords[0], 10);
+  const verse = parseInt(coords[1], 10);
+
+  if (isNaN(chapter) || isNaN(verse)) return null;
+
+  try {
+    const { data: book } = await supabase
+      .from("library_books")
+      .select("slug")
+      .eq("title_en", bookName)
+      .single();
+
+    if (!book) return null;
+
+    const [heRes, enRes] = await Promise.all([
+      supabase
+        .from("text_versions")
+        .select("content")
+        .eq("book_slug", book.slug)
+        .eq("c1_index", chapter)
+        .eq("c2_index", verse)
+        .eq("language_code", "he")
+        .single(),
+      supabase
+        .from("text_versions")
+        .select("content")
+        .eq("book_slug", book.slug)
+        .eq("c1_index", chapter)
+        .eq("c2_index", verse)
+        .eq("language_code", "en")
+        .eq("is_primary", true)
+        .single(),
+    ]);
+
+    return {
+      he: processText(heRes.data?.content || ""),
+      en: processText(enRes.data?.content || "No translation found."),
+    };
+  } catch (err) {
+    console.error("fetchVerseText Error:", err);
+    return null;
+  }
+}
+
+/**
+ * deleteUserCommentary
+ * Permanently removes a note from the database.
+ */
+export async function deleteUserCommentary(noteId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("Authentication required");
+
+  const { error } = await supabase
+    .from("user_commentaries")
+    .delete()
+    .eq("id", noteId)
+    .eq("user_id", user.id); // Guard to ensure only owner can delete
+
+  if (error) throw error;
+
+  revalidatePath("/library");
+  return { success: true };
+}
 
 /**
  * fetchChapterBySlug
- * The core engine of the reader. Pulls text layers (Hebrew, base English)
- * and merges the specialized Sovereignty Layer (user translations) if an ID is provided.
+ * The core engine of the reader. Merges Hebrew foundation with English layers.
  */
 export async function fetchChapterBySlug(
   rawBookSlug: string,
@@ -20,15 +106,12 @@ export async function fetchChapterBySlug(
   const bookSlug = rawBookSlug.toLowerCase();
   if (isNaN(chapterNum)) return null;
 
-  // Determine if we are viewing a specific Sovereignty project (indicated by a UUID)
-  // or a standard library version (e.g., 'jps-1985').
   const isCustomProject = translationSlug.length > 20;
   const versionTitle = isCustomProject
-    ? TRANSLATION_MAP["jps-1985"] // Use JPS as fallback context for custom projects
+    ? TRANSLATION_MAP["jps-1985"]
     : TRANSLATION_MAP[translationSlug] || translationSlug;
 
   try {
-    // 1. Fetch Book Metadata
     const { data: book } = await supabase
       .from("library_books")
       .select("*")
@@ -36,7 +119,6 @@ export async function fetchChapterBySlug(
       .single();
     if (!book) return null;
 
-    // 2. Parallel fetch of all required layers
     const [heRes, enRes, markersRes] = await Promise.all([
       supabase
         .from("text_versions")
@@ -60,7 +142,6 @@ export async function fetchChapterBySlug(
         .eq("c1_index", chapterNum),
     ]);
 
-    // 3. Fetch Sovereignty Overrides if active
     const overrides: Map<number, string> = new Map();
     if (isCustomProject) {
       const { data: customData } = await supabase
@@ -75,25 +156,24 @@ export async function fetchChapterBySlug(
       );
     }
 
-    // 4. Map markers (Parashiot, Aliyot, etc.)
     const markerMap = new Map<number, string>();
     markersRes.data?.forEach((m) => {
-      // Prioritize Parashah starts over other marker types
       if (m.type === "parasha" || !markerMap.has(m.c2_index)) {
         markerMap.set(m.c2_index, m.label);
       }
     });
 
-    // 5. Merge Layers into Unified Verse Objects
-    interface TextRow {
-      c2_index: number;
-      content: string;
-    }
     const heMap = new Map(
-      (heRes.data as TextRow[] | null)?.map((v) => [v.c2_index, v.content])
+      ((heRes.data as TextVersionRow[]) || []).map((v) => [
+        v.c2_index,
+        v.content,
+      ])
     );
     const enMap = new Map(
-      (enRes.data as TextRow[] | null)?.map((v) => [v.c2_index, v.content])
+      ((enRes.data as TextVersionRow[]) || []).map((v) => [
+        v.c2_index,
+        v.content,
+      ])
     );
 
     const lastVerseNum = Math.max(
@@ -108,13 +188,11 @@ export async function fetchChapterBySlug(
         id: `${book.title_en} ${chapterNum}:${i}`,
         c2_index: i,
         he: processText(heMap.get(i) || ""),
-        // The core Sovereignty Logic: Custom content > Context translation > empty
         en: processText(overrides.get(i) || enMap.get(i) || ""),
         parashaStart: markerMap.get(i),
       });
     }
 
-    // 6. Smart Navigation (Next/Prev References)
     let nextRef: string | undefined;
     let prevRef: string | undefined;
 
@@ -177,17 +255,12 @@ export async function fetchChapterBySlug(
   }
 }
 
-/**
- * fetchNextChapter
- * Specialized helper for bidirectional infinite scroll.
- */
 export async function fetchNextChapter(
   ref: string,
   translation: string
 ): Promise<ChapterData | null> {
   const parts = ref.trim().split(" ");
   const chapter = parts.pop() || "1";
-  // Join remaining parts for books with multiple words (e.g., "Song of Songs")
   const bookSlug = parts.join("-").toLowerCase();
   return fetchChapterBySlug(bookSlug, chapter, translation);
 }

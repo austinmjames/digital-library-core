@@ -1,27 +1,20 @@
 "use client";
 
 import React from "react";
-// Import the default export to resolve the circular definition/alias error
 import ReaderHeader from "@/components/reader/header/ReaderHeader";
-import { ReaderLayoutState } from "../hooks/useReaderLayoutState";
+import { MasterPanelState } from "../hooks/useMasterPanel";
 
 /**
  * components/reader/layout/ReaderHeaderWrapper.tsx
- * Bridges global layout state with the ReaderHeader.
- * Updated: Integrated into the DrashX functional ecosystem.
+ * FIXED: Removed 'onOpenTranslations', 'onOpenMarketplace', etc.
+ * since ReaderHeader was simplified to only show branding and passage context.
  */
-export function ReaderHeaderWrapper({ layout }: { layout: ReaderLayoutState }) {
+export function ReaderHeaderWrapper({ layout }: { layout: MasterPanelState }) {
   return (
     <ReaderHeader
       activeBook={layout.state.activeBook}
       activeChapter={layout.state.activeChapter}
       onOpenNav={layout.actions.openNav}
-      onOpenTranslations={layout.actions.openTranslations}
-      onOpenMarketplace={layout.actions.openMarketplace}
-      onOpenProfile={layout.actions.openProfile}
-      onOpenAppearance={layout.actions.openAppearance}
-      onToggleToday={layout.actions.toggleToday}
-      isTodayActive={layout.state.isTodayOpen}
     />
   );
 }

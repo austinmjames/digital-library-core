@@ -3,21 +3,20 @@ import { ChapterData, Verse } from "@/lib/types/library";
 
 /**
  * PanelType
- * Defines the specific sub-views available within the Master Panel.
+ * Unified sub-views. APPEARANCE is handled within ACCOUNT.
  */
 export type PanelType =
   | "TODAY"
   | "COMMENTARY"
   | "MARKETPLACE"
   | "LAYERS"
-  | "APPEARANCE"
   | "ACCOUNT";
 
 /**
- * ReaderLayoutState
- * Refactored for a Single-Panel Master Architecture.
+ * MasterPanelState
+ * FIXED: Removed unused 'ReactNode' import.
  */
-export type ReaderLayoutState = {
+export type MasterPanelState = {
   state: {
     activeBook: string;
     activeChapter: number;
@@ -45,9 +44,7 @@ export type ReaderLayoutState = {
   };
 };
 
-export function useReaderLayoutState(
-  initialChapter: ChapterData
-): ReaderLayoutState {
+export function useMasterPanel(initialChapter: ChapterData): MasterPanelState {
   const [activeBook, setActiveBook] = useState(initialChapter?.book || "");
   const [activeChapter, setActiveChapter] = useState(
     initialChapter?.chapterNum || 0
