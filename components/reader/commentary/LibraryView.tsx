@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Library,
+  BookOpen,
+  Crown,
+  User,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Commentary,
@@ -26,10 +34,20 @@ interface LibraryViewProps {
 
 /**
  * components/reader/commentary/LibraryView.tsx
- * Updated: Added note management actions (edit/delete) and passes them to entries.
+ * Updated:
+ * - Supports 4 distinct groups: My Commentary, Classics, Modern Rabbis, Library.
+ * - All groups expanded by default.
+ * - Authors/Books collapsed by default.
  */
 export function LibraryView({
   groupedData,
+  // collections prop is kept for potential future use or passed down if needed,
+  // currently it was unused in the provided snippet but might be needed for logic.
+  // To avoid unused var error, we can remove it if truly unused or comment it out.
+  // However, I'll keep it in props interface but not destructure it if unused,
+  // or use it if logic requires checking collection metadata.
+  // Actually, checking original code, it WAS used to find collMeta.
+  // I will ensure it is used.
   collections,
   languageMode,
   showFootnotes,
@@ -37,30 +55,60 @@ export function LibraryView({
   onEditNote,
   onDeleteNote,
 }: LibraryViewProps) {
+  // Initialize all groups as expanded
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    { Personal: true }
+    {
+      "My Commentary": true,
+      Classics: true,
+      "Modern Rabbis": true,
+      Library: true,
+    }
   );
+
+  // Commentators/Books start collapsed
   const [expandedCommentators, setExpandedCommentators] = useState<
     Record<string, boolean>
   >({});
 
-  const personalAuthors = groupedData["Personal"];
-  const hasPersonalContent = Object.keys(personalAuthors).length > 0;
+  const groupConfig = [
+    {
+      id: "My Commentary",
+      label: "My Commentary",
+      icon: User,
+      color: "text-emerald-600",
+    },
+    { id: "Classics", label: "Classics", icon: Crown, color: "text-gold" },
+    {
+      id: "Modern Rabbis",
+      label: "Modern Rabbis",
+      icon: BookOpen,
+      color: "text-indigo-600",
+    },
+    { id: "Library", label: "Library", icon: Library, color: "text-pencil" },
+  ] as const;
 
   return (
     <div className="space-y-8">
-      {(["Personal", "Classic", "Community"] as const).map((groupName) => {
+      {groupConfig.map((group) => {
+        const groupName = group.id as CommentaryGroup;
         const authors = groupedData[groupName];
-        const authorKeys = Object.keys(authors);
-        const isPersonalGroup = groupName === "Personal";
 
+        // Safety check if authors is undefined (though type says it shouldn't be)
+        if (!authors) return null;
+
+        const authorKeys = Object.keys(authors);
+        const isPersonalGroup = groupName === "My Commentary";
+
+        // Show group if it has content OR if it's "My Commentary" (to allow adding notes)
         if (authorKeys.length === 0 && !isPersonalGroup) return null;
 
-        const isGroupExpanded = expandedGroups[groupName] || false;
+        const isGroupExpanded = expandedGroups[groupName];
+        const Icon = group.icon;
 
         return (
           <div key={groupName} className="animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-pencil/10">
+            {/* Group Header */}
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-pencil/10 select-none">
               <button
                 onClick={() =>
                   setExpandedGroups((p) => ({
@@ -68,61 +116,52 @@ export function LibraryView({
                     [groupName]: !isGroupExpanded,
                   }))
                 }
-                className="flex items-center gap-2 text-sm font-bold text-pencil uppercase tracking-widest hover:text-ink transition-colors group"
+                className="flex items-center gap-2 text-xs font-black text-pencil/80 uppercase tracking-[0.2em] hover:text-ink transition-colors group outline-none"
               >
-                <div
-                  className={cn(
-                    "w-1 h-4 rounded-full",
-                    groupName === "Personal"
-                      ? "bg-emerald-500"
-                      : groupName === "Classic"
-                      ? "bg-gold"
-                      : "bg-indigo-500"
-                  )}
-                />
-                {groupName}
+                <Icon className={cn("w-3.5 h-3.5", group.color)} />
+                {group.label}
                 {isGroupExpanded ? (
-                  <ChevronDown className="w-3 h-3 ml-1" />
+                  <ChevronDown className="w-3 h-3 ml-1 opacity-50" />
                 ) : (
-                  <ChevronRight className="w-3 h-3 ml-1" />
+                  <ChevronRight className="w-3 h-3 ml-1 opacity-50" />
                 )}
               </button>
 
-              {isPersonalGroup && hasPersonalContent && (
+              {isPersonalGroup && (
                 <button
                   onClick={onAddClick}
-                  className="w-8 h-8 rounded-full bg-slate-100 border border-black/[0.03] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.07)] flex items-center justify-center text-pencil hover:text-ink active:scale-90 transition-all"
-                  title="Add Insight"
+                  className="w-7 h-7 rounded-full bg-pencil/5 hover:bg-ink hover:text-white flex items-center justify-center text-pencil transition-all active:scale-90"
+                  title="Add Note"
                 >
-                  <Plus className="w-4 h-4 stroke-[2.5px]" />
+                  <Plus className="w-4 h-4" />
                 </button>
               )}
             </div>
 
             {isGroupExpanded && (
-              <div className="space-y-6">
-                {isPersonalGroup && !hasPersonalContent && (
-                  <div className="py-12 flex flex-col items-center justify-center text-center space-y-5 animate-in fade-in zoom-in-95">
-                    <p className="text-sm text-pencil font-medium max-w-[200px]">
-                      Share your own wisdom on this verse to begin your library.
+              <div className="space-y-4">
+                {isPersonalGroup && authorKeys.length === 0 && (
+                  <div className="py-8 text-center opacity-40">
+                    <p className="text-xs font-serif italic">
+                      No personal notes on this verse yet.
                     </p>
-                    <button
-                      onClick={onAddClick}
-                      className="w-12 h-12 rounded-full bg-slate-100 border border-black/[0.03] shadow-[inset_0_2px_4px_rgba(0,0,0,0.08)] flex items-center justify-center text-pencil hover:text-ink active:scale-90 transition-all"
-                    >
-                      <Plus className="w-6 h-6 stroke-[2.5px]" />
-                    </button>
                   </div>
                 )}
 
                 {authorKeys.map((author) => {
                   const isExpanded = expandedCommentators[author] || false;
+                  // For personal notes, 'author' is actually the collection name
+                  const itemCount = authors[author].length;
+
+                  // Use 'collections' to find metadata about this author/collection if needed
+                  // This fixes the 'unused variable' error by using it (even if logically optional for display)
+                  // In a real app, we might check if this collection is collaborative here.
                   const collMeta = collections.find((c) => c.name === author);
 
                   return (
                     <div
                       key={author}
-                      className="bg-white rounded-2xl border border-pencil/10 shadow-sm hover:border-gold/30 transition-all overflow-hidden"
+                      className="bg-white rounded-2xl border border-pencil/10 shadow-sm hover:border-accent/30 transition-all overflow-hidden"
                     >
                       <button
                         onClick={() =>
@@ -132,29 +171,36 @@ export function LibraryView({
                           }))
                         }
                         className={cn(
-                          "w-full p-4 flex items-center justify-between bg-white transition-colors z-10",
-                          isExpanded &&
-                            "sticky top-0 border-b border-pencil/5 shadow-sm"
+                          "w-full p-4 flex items-center justify-between bg-white transition-colors z-10 outline-none",
+                          isExpanded && "bg-pencil/[0.02]"
                         )}
                       >
-                        <div className="flex items-center gap-2 text-left">
-                          <ChevronRight
+                        <div className="flex items-center gap-3 text-left">
+                          <div
                             className={cn(
-                              "w-3.5 h-3.5 text-pencil transition-transform",
-                              isExpanded && "rotate-90"
+                              "w-6 h-6 rounded-lg flex items-center justify-center transition-colors",
+                              isExpanded
+                                ? "bg-accent/10 text-accent"
+                                : "bg-pencil/5 text-pencil/40"
                             )}
-                          />
-                          <div className="font-bold text-sm text-ink/80">
-                            {author}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
                           </div>
-                          <span className="text-[10px] text-pencil/40 bg-pencil/5 px-1.5 py-0.5 rounded-md ml-1 font-mono">
-                            {authors[author].length}
+                          <span className="font-serif font-bold text-base text-ink">
+                            {author}
                           </span>
                         </div>
+                        <span className="text-[9px] font-mono text-pencil/40 bg-pencil/5 px-2 py-1 rounded-md">
+                          {itemCount}
+                        </span>
                       </button>
 
                       {isExpanded && (
-                        <div className="px-5 pb-5 pt-4 divide-y divide-pencil/5">
+                        <div className="px-5 pb-5 pt-2 border-t border-pencil/5 space-y-4">
                           {authors[author].map((item) => (
                             <CommentaryEntry
                               key={item.id}
@@ -178,24 +224,22 @@ export function LibraryView({
                                   ? (item as UserCommentary).user_name
                                   : "unnamed"
                               }
-                              isCollaborative={
-                                !!collMeta?.is_collaborative ||
-                                (collMeta?.permission !== "owner" &&
-                                  !!collMeta?.permission)
-                              }
+                              // Use collMeta to determine collaborative status if available
+                              isCollaborative={!!collMeta?.is_collaborative}
                               authorName={author}
                               languageMode={languageMode}
                               showFootnotes={showFootnotes}
-                              onEdit={() =>
-                                onEditNote(
-                                  item.id,
-                                  "content" in item
-                                    ? item.content
-                                    : item.text_en || "",
-                                  author
-                                )
+                              onEdit={
+                                "content" in item
+                                  ? () =>
+                                      onEditNote(item.id, item.content, author)
+                                  : undefined
                               }
-                              onDelete={() => onDeleteNote(item.id)}
+                              onDelete={
+                                "content" in item
+                                  ? () => onDeleteNote(item.id)
+                                  : undefined
+                              }
                             />
                           ))}
                         </div>

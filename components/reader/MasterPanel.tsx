@@ -37,7 +37,7 @@ interface MasterPanelProps {
 
 /**
  * components/reader/MasterPanel.tsx
- * FIXED: Explicit named export and corrected import paths for sub-panels.
+ * Updated: Increased panel width for better readability and touch targets.
  */
 export function MasterPanel({
   isOpen,
@@ -69,7 +69,8 @@ export function MasterPanel({
 
       <aside
         className={cn(
-          "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden",
+          // Increased widths: md:w-[480px] lg:w-[550px]
+          "fixed top-0 right-0 h-full w-full md:w-[480px] lg:w-[550px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >

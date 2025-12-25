@@ -16,6 +16,7 @@ import {
  * useCommentaryPanel
  * Logic engine for the Commentary Sidebar.
  * Manages fetching, grouping, saving, and deleting insights.
+ * Updated to match the new 4-group structure required by LibraryView.
  */
 export function useCommentaryPanel(verseRef: string | null) {
   const { user } = useAuth();
@@ -28,7 +29,6 @@ export function useCommentaryPanel(verseRef: string | null) {
     "bilingual"
   );
   const [showFootnotes, setShowFootnotes] = useState(false);
-  const [myAuthors] = useState<string[]>(["Rashi", "רש״י"]);
   const [selectedCollection, setSelectedCollection] =
     useState<string>("My Commentary");
   const [isSaving, setIsSaving] = useState(false);
@@ -56,41 +56,70 @@ export function useCommentaryPanel(verseRef: string | null) {
   }, [verseRef]);
 
   const groupedData = useMemo(() => {
+    // Initialize with the new keys expected by LibraryView
     const groups: Record<
       CommentaryGroup,
       Record<string, (Commentary | UserCommentary)[]>
     > = {
-      Personal: {},
-      Classic: {},
-      Community: {},
+      "My Commentary": {},
+      Classics: {},
+      "Modern Rabbis": {},
+      Library: {},
     };
+
+    // Helper lists for categorization
+    const CLASSIC_AUTHORS = [
+      "Rashi",
+      "Ramban",
+      "Sforno",
+      "Ibn Ezra",
+      "Rashbam",
+      "Ohr HaChaim",
+      "Baal HaTurim",
+      "Kli Yakar",
+      "Malbim",
+      "Ralbag",
+    ];
+
+    const MODERN_AUTHORS = [
+      "The Rebbe",
+      "Lubavitch",
+      "Steinsaltz",
+      "Hirsch",
+      "Sacks",
+      "Kaplan",
+    ];
 
     commentaries.forEach((comm) => {
       const author = comm.author_en || comm.author_he || "Unknown";
-      if (activeTab === "MY_COMMENTARIES" && !myAuthors.includes(author))
-        return;
-      const group = comm.source_ref?.includes("Community")
-        ? "Community"
-        : "Classic";
+
+      let group: CommentaryGroup = "Library";
+
+      if (CLASSIC_AUTHORS.some((c) => author.includes(c))) {
+        group = "Classics";
+      } else if (
+        MODERN_AUTHORS.some((m) => author.includes(m)) ||
+        comm.category === "Modern"
+      ) {
+        group = "Modern Rabbis";
+      } else if (comm.source_ref?.includes("Community")) {
+        group = "Library";
+      }
+
       if (!groups[group][author]) groups[group][author] = [];
       groups[group][author].push(comm);
     });
 
     userCommentaries.forEach((note) => {
-      const collMeta = collections.find((c) => c.name === note.collection_name);
-      if (
-        activeTab === "MY_COMMENTARIES" &&
-        collMeta &&
-        !collMeta.is_in_library
-      )
-        return;
-      if (!groups["Personal"][note.collection_name])
-        groups["Personal"][note.collection_name] = [];
-      groups["Personal"][note.collection_name].push(note);
+      // All user notes go to "My Commentary"
+      const collName = note.collection_name || "Personal Notes";
+      if (!groups["My Commentary"][collName])
+        groups["My Commentary"][collName] = [];
+      groups["My Commentary"][collName].push(note);
     });
 
     return groups;
-  }, [commentaries, userCommentaries, activeTab, myAuthors, collections]);
+  }, [commentaries, userCommentaries]);
 
   const handleCreateCollection = useCallback(
     async (name: string, isCollab: boolean) => {
@@ -186,7 +215,7 @@ export function useCommentaryPanel(verseRef: string | null) {
       activeTab,
       languageMode,
       showFootnotes,
-      myAuthors,
+      myAuthors: [], // Deprecated in favor of direct grouping
       selectedCollection,
       isSaving,
       groupedData,

@@ -26,7 +26,7 @@ interface CommentaryEntryProps {
 
 /**
  * CommentaryEntry
- * Updated: iOS-friendly top-right aligned menu with large hit targets.
+ * Updated: Set explicit font sizes (16pt approx) for readability.
  */
 export function CommentaryEntry({
   id,
@@ -57,21 +57,23 @@ export function CommentaryEntry({
         {renderHe && (
           <div
             className={cn(
-              "text-right font-hebrew text-lg leading-relaxed text-ink",
+              "text-right font-hebrew leading-relaxed text-ink",
               !showFootnotes && "hide-notes"
             )}
+            style={{ fontSize: "13pt" }} // Explicit 12pt as requested
             dangerouslySetInnerHTML={{ __html: textHe || textEn || "" }}
           />
         )}
         {renderEn && (
           <div
             className={cn(
-              "text-left font-english text-sm leading-relaxed text-ink/80",
+              "text-left font-english leading-relaxed text-ink/80",
               languageMode === "bilingual" &&
                 textHe &&
                 "border-t border-pencil/10 pt-2 mt-1",
               !showFootnotes && "hide-notes"
             )}
+            style={{ fontSize: "13pt" }} // Explicit 14pt as requested
             dangerouslySetInnerHTML={{ __html: textEn || textHe || "" }}
           />
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useRef, useCallback } from "react";
+import React, { memo, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTextSettings } from "@/components/context/text-settings-context";
 import { Verse } from "@/lib/types/library";
@@ -17,8 +17,7 @@ interface ChapterProps {
 
 /**
  * components/reader/Chapter.tsx
- * Updated: Refined with modern UI typography (Segoe UI/Inter) and a tactile "imprinted" feel.
- * Replaced gold accents with Powder Blue and simplified the hierarchy for a cleaner scholarly look.
+ * Updated: Restored grey background highlight for selected verse.
  */
 const Chapter = memo(
   ({
@@ -30,8 +29,8 @@ const Chapter = memo(
   }: ChapterProps) => {
     const { displayMode, fontSize, showFootnotes } = useTextSettings();
     const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-    // Layout configuration from unified settings
     const showHebrew =
       displayMode === "hebrew" || displayMode.startsWith("bilingual");
     const showEnglish =
@@ -39,10 +38,29 @@ const Chapter = memo(
     const isParallel = displayMode === "bilingual-parallel";
     const isStacked = displayMode === "bilingual-stacked";
 
-    /**
-     * startPress
-     * Initiates the long-press timer only if editing is allowed.
-     */
+    // --- Footnote Interaction Logic ---
+    useEffect(() => {
+      if (!containerRef.current) return;
+
+      const handleFootnoteClick = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains("sefaria-note-trigger")) {
+          e.stopPropagation();
+          const wrapper = target.closest(".sefaria-note-wrapper");
+          if (wrapper) {
+            wrapper.classList.toggle("expanded");
+          }
+        }
+      };
+
+      const container = containerRef.current;
+      container.addEventListener("click", handleFootnoteClick);
+
+      return () => {
+        container.removeEventListener("click", handleFootnoteClick);
+      };
+    }, [verses, displayMode]);
+
     const startPress = useCallback(
       (verse: Verse) => {
         if (!canEdit) return;
@@ -63,46 +81,79 @@ const Chapter = memo(
     }, []);
 
     const toHebrewNumeral = (n: number) => {
-      const letters = [
-        "",
-        "א",
-        "ב",
-        "ג",
-        "ד",
-        "ה",
-        "ו",
-        "ז",
-        "ח",
-        "ט",
-        "י",
-        "יא",
-        "יב",
-        "יג",
-        "יד",
-        "טו",
-        "טז",
-        "יז",
-        "יח",
-        "יט",
-        "כ",
-      ];
-      return letters[n] || n.toString();
+      if (n <= 0) return "";
+
+      const letters: Record<number, string> = {
+        1: "א",
+        2: "ב",
+        3: "ג",
+        4: "ד",
+        5: "ה",
+        6: "ו",
+        7: "ז",
+        8: "ח",
+        9: "ט",
+        10: "י",
+        20: "כ",
+        30: "ל",
+        40: "מ",
+        50: "נ",
+        60: "ס",
+        70: "ע",
+        80: "פ",
+        90: "צ",
+        100: "ק",
+        200: "r",
+        300: "ש",
+        400: "ת",
+      };
+
+      let result = "";
+      let remainder = n;
+
+      if (remainder >= 100) {
+        const hundreds = Math.floor(remainder / 100) * 100;
+        if (letters[hundreds]) {
+          result += letters[hundreds];
+          remainder -= hundreds;
+        }
+      }
+
+      if (remainder >= 10) {
+        if (remainder === 15) return result + "טו";
+        if (remainder === 16) return result + "טז";
+
+        const tens = Math.floor(remainder / 10) * 10;
+        result += letters[tens];
+        remainder -= tens;
+      }
+
+      if (remainder > 0) {
+        result += letters[remainder];
+      }
+
+      return result;
     };
 
     return (
-      <article className="animate-in fade-in duration-700 font-sans">
+      <article
+        ref={containerRef}
+        className="animate-in fade-in duration-700 font-sans"
+      >
         <div
-          className={cn("space-y-4", isParallel ? "space-y-8" : "space-y-4")}
+          className={cn(
+            "space-y-0.5",
+            isParallel ? "space-y-4" : "space-y-0.5"
+          )}
         >
           {verses.map((verse) => {
             const isSelected = selectedVerseId === verse.id;
 
             return (
               <React.Fragment key={verse.id}>
-                {/* Modern Parshah Header */}
                 {verse.parashaStart && (
-                  <div className="py-20 flex items-center justify-center select-none">
-                    <div className="flex flex-col items-center gap-4">
+                  <div className="py-8 flex items-center justify-center select-none">
+                    <div className="flex flex-col items-center gap-2">
                       <div className="h-px w-8 bg-pencil/10" />
                       <h3 className="text-xs font-black text-pencil/40 uppercase tracking-[0.5em] text-center leading-none">
                         {verse.parashaStart}
@@ -113,6 +164,8 @@ const Chapter = memo(
                 )}
 
                 <div
+                  // Added ID for anchoring
+                  id={`verse-${verse.c2_index}`}
                   onClick={() => onVerseClick(verse.id)}
                   onMouseDown={() => startPress(verse)}
                   onMouseUp={endPress}
@@ -120,37 +173,37 @@ const Chapter = memo(
                   onTouchStart={() => startPress(verse)}
                   onTouchEnd={endPress}
                   className={cn(
-                    "group relative transition-all duration-500 rounded-2xl p-4 md:p-8 cursor-pointer border select-none",
+                    "group relative transition-all duration-300 rounded-2xl cursor-pointer border select-none",
+                    "px-14 py-2 md:px-16 md:py-3",
                     isSelected
-                      ? "bg-highlight/50 border-accent/20 shadow-[inset_0_1px_4px_rgba(0,0,0,0.02)]"
-                      : "bg-transparent border-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01]",
+                      ? "bg-black/[0.04] border-transparent" // Restored visible grey highlight
+                      : "bg-transparent border-transparent",
                     isParallel
-                      ? "grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-20 items-start"
-                      : "flex flex-col gap-5"
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-24 items-start"
+                      : "flex flex-col gap-1"
                   )}
                 >
-                  {/* Floating Action Hint */}
                   {canEdit && (
-                    <div className="absolute top-3 right-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                      <span className="text-[8px] font-bold text-pencil/40 uppercase tracking-widest">
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2 pointer-events-none">
+                      <span className="text-[9px] font-bold text-pencil/40 uppercase tracking-widest">
                         Interpret
                       </span>
-                      <Edit3 className="w-3 h-3 text-accent" />
+                      <Edit3 className="w-3.5 h-3.5 text-accent" />
                     </div>
                   )}
 
                   {showHebrew && (
                     <div
                       className={cn(
-                        "hebrew-text text-ink text-right relative leading-[1.85]",
+                        "hebrew-text text-ink text-right relative leading-[1.6]",
                         isParallel ? "order-2" : "w-full max-w-3xl ml-auto"
                       )}
                       style={{ fontSize: `${fontSize}pt` }}
                     >
                       <span
                         className={cn(
-                          "absolute -right-12 top-1 text-sm font-semibold select-none w-10 text-center transition-colors font-sans",
-                          isSelected ? "text-accent" : "text-pencil/15"
+                          "absolute -right-10 top-1 w-8 text-center transition-colors font-sans text-lg font-medium",
+                          isSelected ? "text-pencil/50" : "text-pencil/20"
                         )}
                       >
                         {toHebrewNumeral(verse.c2_index)}
@@ -165,19 +218,19 @@ const Chapter = memo(
                   {showEnglish && (
                     <div
                       className={cn(
-                        "english-text text-ink/80 text-left relative leading-[1.65]",
+                        "english-text text-ink/80 text-left relative leading-[1.5]",
                         isParallel ? "order-1" : "w-full max-w-3xl mr-auto"
                       )}
                       style={{ fontSize: `${fontSize * 0.88}pt` }}
                     >
                       {isStacked && showHebrew && (
-                        <div className="h-px w-6 bg-pencil/5 mb-6" />
+                        <div className="h-px w-8 bg-pencil/5 mb-1" />
                       )}
                       <span
                         className={cn(
-                          "absolute -left-12 top-1 text-[10px] font-bold select-none block w-10 text-center pt-1 transition-colors font-sans",
-                          displayMode === "english" && "text-sm",
-                          isSelected ? "text-accent" : "text-pencil/15"
+                          "absolute -left-10 top-[0.3em] w-8 text-center transition-colors font-sans text-sm font-medium",
+                          displayMode === "english" && "text-base",
+                          isSelected ? "text-pencil/50" : "text-pencil/20"
                         )}
                       >
                         {verse.c2_index}

@@ -6,9 +6,12 @@
   :root {
     /* --- The Refined DrashX Palette (Light) --- */
     --paper: #faf9f6;
-    --ink: #1a1a1a; /* True Black for Drash */
-    --pencil: #64748b;
-    --charcoal: #334155;
+    /* Softened Ink: Deep Graphite instead of Black */
+    --ink: #2d2d2d;
+    /* Pencil: A warm, medium grey */
+    --pencil: #737373;
+    /* Charcoal: A softer dark grey for secondary text */
+    --charcoal: #4a4a4a;
 
     /* DrashX Medium Blue (High Contrast Accent for X) */
     --accent: 221 83% 53%; /* Vivid Medium Blue */
@@ -18,18 +21,18 @@
 
     /* --- Shadcn UI Mappings --- */
     --background: 40 10% 98%;
-    --foreground: 222 47% 11%;
+    --foreground: 0 0% 18%; /* Matches roughly #2d2d2d */
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 0 0% 18%;
 
     --primary: 215 25% 27%;
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary-foreground: 0 0% 18%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
@@ -46,9 +49,9 @@
 
   .dark {
     --paper: #0f172a;
-    --ink: #ffffff; /* Pure White for Dark Mode Branding */
+    --ink: #e2e8f0; /* Soft white/grey for dark mode */
     --pencil: #94a3b8;
-    --charcoal: #e2e8f0;
+    --charcoal: #cbd5e1;
 
     /* Darkmode Branding: All White logic */
     --accent: 0 0% 100%;
@@ -123,4 +126,56 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  .hide-notes .sefaria-note-wrapper {
+    display: none;
+  }
+}
+
+/* --- Inline Footnote Styles --- */
+.sefaria-note-wrapper {
+  display: inline;
+  position: relative;
+}
+
+.sefaria-note-trigger {
+  cursor: pointer;
+  color: var(--pencil); /* Uses your variable */
+  font-size: 0.75em;
+  font-weight: bold;
+  vertical-align: super;
+  margin: 0 2px;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.sefaria-note-trigger:hover {
+  color: hsl(var(--accent)); /* Uses your variable */
+}
+
+/* Hidden by default */
+.sefaria-note-content {
+  display: none;
+}
+
+/* Expanded State */
+.sefaria-note-wrapper.expanded .sefaria-note-content {
+  display: inline; /* Changed from inline-block to inline */
+  background-color: var(--highlight);
+  color: var(--ink);
+  font-size: 0.85em;
+  line-height: inherit; /* Inherit line-height to fit seamlessly */
+  padding: 0 4px; /* Reduced vertical padding */
+  border-radius: 4px; /* Slightly smaller radius */
+  /* Removed border to feel more integrated */
+  margin: 0 2px;
+  vertical-align: baseline;
+  /* Removed box-shadow for flatter inline look */
+  font-family: "Segoe UI", sans-serif; /* Keep English/Sans for notes usually */
+  direction: ltr; /* Reset direction for notes if they are English */
+}
+
+/* Optional: Active state for trigger when expanded */
+.sefaria-note-wrapper.expanded .sefaria-note-trigger {
+  color: hsl(var(--accent));
 }

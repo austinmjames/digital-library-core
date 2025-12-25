@@ -35,6 +35,7 @@ export interface Commentary {
   text_he?: string;
   verse_ref: string;
   source_ref: string;
+  category?: string; // Added to support "Modern" tagging
 }
 
 export interface UserCommentary {
@@ -60,7 +61,11 @@ export interface UserTranslation {
 
 // --- Navigation & Grouping ---
 
-export type CommentaryGroup = "Personal" | "Classic" | "Community";
+export type CommentaryGroup =
+  | "My Commentary"
+  | "Library"
+  | "Classics"
+  | "Modern Rabbis";
 
 /**
  * CommentaryTab
@@ -73,6 +78,5 @@ export type CommentaryTab =
   | "MANAGE_BOOKS";
 
 // --- PARTITION RE-EXPORTS ---
-// These pull from social.ts and study.ts to maintain modularity
 export * from "./social";
 export * from "./study";

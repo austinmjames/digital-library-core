@@ -24,8 +24,9 @@ export function MasterPanelTrigger({
         "fixed right-0 top-1/2 -translate-y-1/2 z-[55] transition-all duration-500 ease-spring group",
         "h-24 w-6 bg-paper border-l border-y border-pencil/10 rounded-l-2xl shadow-[-4px_0_12px_rgba(0,0,0,0.05)]",
         "hover:w-8 hover:bg-white flex items-center justify-center",
+        // Matches new widths in MasterPanel: md:w-[480px] lg:w-[550px]
         isOpen &&
-          "translate-x-full md:translate-x-[-400px] lg:translate-x-[-450px]"
+          "translate-x-full md:translate-x-[-480px] lg:translate-x-[-550px]"
       )}
     >
       <div className="flex flex-col items-center gap-1">

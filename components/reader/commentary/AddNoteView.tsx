@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Loader2,
   Bold,
   Italic,
   Underline,
@@ -17,6 +16,8 @@ import {
   Highlighter,
   Eraser,
   Languages,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,9 +43,8 @@ interface NoteEditorProps {
 }
 
 /**
- * components/reader/commentary/NoteEditor.tsx
- * Professional Insight Editor with high-fidelity typography and sticky controls.
- * Updated: Added 'Remove Highlight' functionality using the Eraser tool.
+ * components/reader/commentary/AddNoteView.tsx
+ * Updated: Refined verse reference styling to be more subtle and muted.
  */
 export function NoteEditor({
   collections,
@@ -66,7 +66,6 @@ export function NoteEditor({
   const [isPassageExpanded, setIsPassageExpanded] = useState(true);
   const editorRef = useRef<HTMLDivElement>(null);
 
-  // Sync content and focus when entering editor
   useEffect(() => {
     if (editorRef.current) {
       if (editorRef.current.innerHTML !== initialContent) {
@@ -74,7 +73,6 @@ export function NoteEditor({
       }
       editorRef.current.focus();
 
-      // Move caret to end of existing text
       const range = document.createRange();
       const selection = window.getSelection();
       range.selectNodeContents(editorRef.current);
@@ -115,19 +113,12 @@ export function NoteEditor({
     editorRef.current?.focus();
   };
 
-  /**
-   * highlight
-   * Handles applying and removing background highlights.
-   */
   const highlight = (type: "blue" | "yellow" | "none") => {
     if (typeof document === "undefined") return;
-
     if (type === "none") {
-      // Removing highlight by setting background to transparent
       execCmd("backColor", "transparent");
       return;
     }
-
     const isDark = document.documentElement.classList.contains("dark");
     const colors = {
       blue: isDark ? "#075985" : "#BAE6FD",
@@ -151,7 +142,6 @@ export function NoteEditor({
 
   return (
     <div className="flex flex-col h-full bg-paper animate-in slide-in-from-bottom-4 duration-500 overflow-hidden">
-      {/* 1. Primary View Header */}
       <header className="h-20 border-b border-pencil/10 bg-paper/95 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-30">
         <div className="flex items-center gap-3">
           <button
@@ -160,7 +150,6 @@ export function NoteEditor({
           >
             <ChevronLeft className="w-6 h-6 stroke-[2.5px]" />
           </button>
-
           <div className="flex items-center gap-4">
             <h2 className="text-xl text-ink font-sans font-bold tracking-tight">
               {initialContent ? "Edit Commentary" : "Add Commentary"}
@@ -168,7 +157,7 @@ export function NoteEditor({
           </div>
         </div>
 
-        {/* 3-Way Passage Toggle */}
+        {/* Tactile 3-Way Toggle for Passage Preview */}
         <div className="flex bg-slate-200/40 p-1 rounded-2xl shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.08)] border border-black/[0.02]">
           <button
             onClick={() => setPreviewLang("he")}
@@ -179,7 +168,9 @@ export function NoteEditor({
                 : "text-pencil/30 hover:text-pencil"
             )}
           >
-            <span className="text-[15px] font-semibold pt-0.5">אב</span>
+            <span className="text-[15px] font-semibold leading-none pt-0.5">
+              אב
+            </span>
           </button>
           <button
             onClick={() => setPreviewLang("bilingual")}
@@ -201,18 +192,18 @@ export function NoteEditor({
                 : "text-pencil/60 hover:text-pencil"
             )}
           >
-            <span className="text-[12px] font-semibold">Aa</span>
+            <span className="text-[12px] font-semibold leading-none">Aa</span>
           </button>
         </div>
       </header>
 
-      {/* 2. Collapsible Passage Section */}
       <div className="bg-pencil/[0.01] border-b border-pencil/5 shrink-0 overflow-hidden">
         <button
           onClick={() => setIsPassageExpanded(!isPassageExpanded)}
           className="w-full px-8 py-4 flex items-center justify-between group hover:bg-pencil/[0.02] transition-colors outline-none"
         >
-          <h4 className="text-xl font-bold text-accent font-sans tracking-tight">
+          {/* UPDATED STYLING HERE */}
+          <h4 className="text-lg font-semibold text-pencil/80 font-sans tracking-tight">
             {verseRef}
           </h4>
           <div className="w-8 h-8 rounded-full bg-pencil/5 flex items-center justify-center text-pencil/40 group-hover:text-accent transition-colors">
@@ -223,7 +214,6 @@ export function NoteEditor({
             )}
           </div>
         </button>
-
         {isPassageExpanded && (
           <div className="px-8 pb-6 animate-in slide-in-from-top-2 duration-300">
             <div className="flex flex-col gap-4">
@@ -247,7 +237,6 @@ export function NoteEditor({
         )}
       </div>
 
-      {/* 3. Workspace */}
       <div className="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">
         <div className="sticky top-0 z-20 px-8 py-3 bg-paper/90 backdrop-blur-md border-b border-pencil/5 flex flex-wrap items-center gap-1">
           <div className="flex items-center gap-0.5 p-1 bg-pencil/5 rounded-xl border border-black/[0.03] shadow-sm">
@@ -280,7 +269,6 @@ export function NoteEditor({
               <Strikethrough className="w-4 h-4" />
             </button>
           </div>
-
           <div className="flex items-center gap-0.5 p-1 bg-pencil/5 rounded-xl border border-black/[0.03] shadow-sm">
             <button
               onClick={() => highlight("blue")}
@@ -296,7 +284,6 @@ export function NoteEditor({
             >
               <Highlighter className="w-4 h-4" />
             </button>
-            {/* Remove Highlight Tool */}
             <button
               onClick={() => highlight("none")}
               className="w-9 h-9 flex items-center justify-center hover:bg-white rounded-lg transition-all text-pencil hover:text-red-500 active:scale-90 border-l border-pencil/10 ml-0.5 pl-0.5"
@@ -306,7 +293,6 @@ export function NoteEditor({
             </button>
           </div>
         </div>
-
         <div className="flex-1 p-8 pt-10">
           <div
             ref={editorRef}
@@ -317,7 +303,6 @@ export function NoteEditor({
         </div>
       </div>
 
-      {/* 4. Split Footer */}
       <footer className="p-6 border-t border-pencil/10 bg-paper/95 backdrop-blur-xl z-20 shrink-0">
         {isAddingBook ? (
           <div className="flex items-center gap-2 animate-in zoom-in-95">
@@ -325,7 +310,7 @@ export function NoteEditor({
               autoFocus
               value={newBookName}
               onChange={(e) => setNewBookName(e.target.value)}
-              placeholder="Name your new book..."
+              placeholder="Name new book..."
               className="flex-1 h-14 bg-white border border-accent/20 rounded-2xl px-6 font-bold text-ink outline-none"
               onKeyDown={(e) => e.key === "Enter" && handleCreateBook()}
             />
@@ -364,7 +349,7 @@ export function NoteEditor({
                 className="w-[300px] rounded-2xl p-2 border-pencil/10 shadow-2xl"
               >
                 <div className="px-3 py-2 text-[9px] font-black text-pencil/40 uppercase tracking-widest">
-                  Your Authorized Books
+                  Authorized Books
                 </div>
                 {collections.map((c) => (
                   <DropdownMenuItem
@@ -389,17 +374,15 @@ export function NoteEditor({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
             <button
               onClick={handleSave}
               disabled={isSaving || isViewOnly}
-              className="w-20 flex items-center justify-center bg-accent text-white hover:bg-accent/90 transition-all disabled:opacity-30 active:scale-95 group/save"
-              title="Commit insight"
+              className="w-20 flex items-center justify-center bg-accent text-white hover:bg-accent/90 transition-all active:scale-95 group/save"
             >
               {isSaving ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <Save className="w-5 h-5 group-hover/save:scale-110 transition-transform" />
+                <Save className="w-5 h-5 group-hover/save:scale-110" />
               )}
             </button>
           </div>

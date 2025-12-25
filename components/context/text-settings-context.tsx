@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 /**
  * components/context/text-settings-context.tsx
  * Unified Display Mode and persistent preferences.
- * Updated: Now synchronizes with Supabase Cloud Storage if a user is logged in.
+ * Updated: Default font size set to 16pt.
  */
 
 export type DisplayMode =
@@ -44,7 +44,8 @@ export function TextSettingsProvider({
   // 1. Initial State with Local Fallback
   const [displayMode, setDisplayMode] =
     useState<DisplayMode>("bilingual-parallel");
-  const [fontSize, setFontSize] = useState(18);
+  // Default font size updated to 16
+  const [fontSize, setFontSize] = useState(16);
   const [showFootnotes, setShowFootnotes] = useState(true);
 
   // Guard to prevent double-syncing on initial load

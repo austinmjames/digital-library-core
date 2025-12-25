@@ -1,18 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { NavCollection, NavBook, fetchLibraryData } from "@/lib/books";
+import { NavCollection, fetchLibraryData } from "@/lib/books";
 import { cn } from "@/lib/utils";
-import {
-  X,
-  Book,
-  ShoppingBag,
-  Plus,
-  Trash2,
-  Loader2,
-  ChevronRight,
-  ChevronDown,
-} from "lucide-react";
+import { X, ArrowLeft, Book, ShoppingBag } from "lucide-react";
+import { LibrarySearch } from "@/components/reader/navigation/LibrarySearch";
+import { LibraryMy } from "@/components/reader/navigation/LibraryMy";
+import { LibraryMarketplace } from "@/components/reader/navigation/LibraryMarketplace";
+import { NavState } from "@/components/reader/navigation/types";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface NavigationMenuProps {
   isOpen: boolean;
@@ -22,359 +18,201 @@ interface NavigationMenuProps {
 
 type MenuTab = "LIBRARY" | "MARKETPLACE";
 
+/**
+ * components/reader/NavigationMenu.tsx
+ * Updated Layout:
+ * - Desktop: Centered "pull-down" panel from the header area.
+ * - Mobile: Fullscreen slide-over.
+ */
 export function NavigationMenu({
   isOpen,
   onClose,
   currentBook,
 }: NavigationMenuProps) {
   const [activeTab, setActiveTab] = useState<MenuTab>("LIBRARY");
+  const [navState, setNavState] = useState<NavState>({ level: "CATEGORY" });
 
-  // Data State
   const [libraryData, setLibraryData] = useState<NavCollection[]>([]);
   const [marketplaceData, setMarketplaceData] = useState<NavCollection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // UI State for expanding categories
-  const [expandedCategories, setExpandedCategories] = useState<
-    Record<string, boolean>
-  >({});
+  const [loading, setLoading] = useState(false);
 
-  const toggleCategory = (categoryName: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [categoryName]: !prev[categoryName],
-    }));
-  };
-
-  // Fetch Data on Mount
   useEffect(() => {
     async function loadData() {
-      setIsLoading(true);
+      setLoading(true);
       try {
         const { library, marketplace } = await fetchLibraryData();
         setLibraryData(library);
         setMarketplaceData(marketplace);
-
-        // Auto-expand all categories initially for better UX
-        const allCats: Record<string, boolean> = {};
-        [...library, ...marketplace].forEach((col) => {
-          col.categories.forEach((cat) => {
-            allCats[cat.name] = true;
-          });
-        });
-        setExpandedCategories(allCats);
       } catch (e) {
         console.error("Failed to load navigation", e);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     }
-
-    if (isOpen && libraryData.length === 0) {
-      loadData();
-    }
+    if (isOpen && libraryData.length === 0) loadData();
   }, [isOpen, libraryData.length]);
 
-  const handleTabChange = (tab: MenuTab) => {
-    setActiveTab(tab);
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeout(() => setNavState({ level: "CATEGORY" }), 300);
+    }
+  }, [isOpen]);
+
+  // Reset level when switching tabs
+  useEffect(() => {
+    setNavState({ level: "CATEGORY" });
+  }, [activeTab]);
+
+  const handleBack = () => {
+    switch (navState.level) {
+      case "CHAPTER":
+        setNavState((prev) => ({
+          ...prev,
+          level: "BOOK",
+          selectedBook: undefined,
+        }));
+        break;
+      case "BOOK":
+        setNavState((prev) => ({
+          ...prev,
+          level: "SUBCATEGORY",
+          selectedSubCategory: undefined,
+        }));
+        break;
+      case "SUBCATEGORY":
+        setNavState((prev) => ({
+          ...prev,
+          level: "CATEGORY",
+          selectedCategory: undefined,
+        }));
+        break;
+      default:
+        // Do nothing if at root, or maybe close?
+        // Usually back at root does nothing in this new layout as tabs are above
+        break;
+    }
   };
 
-  /**
-   * Mock function to move books. In production, this calls a Server Action.
-   */
-  const moveBook = (bookSlug: string, source: "LIBRARY" | "MARKETPLACE") => {
-    const sourceList = source === "LIBRARY" ? libraryData : marketplaceData;
-    const targetList = source === "LIBRARY" ? marketplaceData : libraryData;
-    const setSource =
-      source === "LIBRARY" ? setLibraryData : setMarketplaceData;
-    const setTarget =
-      source === "LIBRARY" ? setMarketplaceData : setLibraryData;
-
-    // Deep clone
-    const newSource = JSON.parse(JSON.stringify(sourceList)) as NavCollection[];
-    const newTarget = JSON.parse(JSON.stringify(targetList)) as NavCollection[];
-
-    let bookToMove: NavBook | null = null;
-    let targetCollectionName = "";
-    let targetCollectionDesc: string | undefined = undefined;
-    let targetCategoryName = "";
-    let targetCategoryDesc: string | undefined = undefined;
-
-    // 1. Find and remove from source
-    for (const col of newSource) {
-      for (const cat of col.categories) {
-        const idx = cat.books.findIndex((b) => b.slug === bookSlug);
-        if (idx !== -1) {
-          bookToMove = cat.books[idx];
-          targetCollectionName = col.name;
-          targetCollectionDesc = col.description;
-          targetCategoryName = cat.name;
-          targetCategoryDesc = cat.description;
-          cat.books.splice(idx, 1);
-          break;
-        }
-      }
-      if (bookToMove) break;
+  const getBreadcrumb = () => {
+    switch (navState.level) {
+      case "SUBCATEGORY":
+        return navState.selectedCategory?.name;
+      case "BOOK":
+        return navState.selectedSubCategory?.name;
+      case "CHAPTER":
+        return navState.selectedBook?.name;
+      default:
+        return activeTab === "LIBRARY" ? "My Library" : "Marketplace";
     }
-
-    if (!bookToMove) return;
-
-    // 2. Add to target
-    // We use findIndex to avoid 'undefined' reference issues with object references
-    let targetColIndex = newTarget.findIndex(
-      (c) => c.name === targetCollectionName
-    );
-
-    if (targetColIndex === -1) {
-      newTarget.push({
-        name: targetCollectionName,
-        description: targetCollectionDesc,
-        categories: [],
-      });
-      targetColIndex = newTarget.length - 1;
-    }
-
-    const targetCol = newTarget[targetColIndex];
-    let targetCat = targetCol.categories.find(
-      (c) => c.name === targetCategoryName
-    );
-
-    if (!targetCat) {
-      targetCat = {
-        name: targetCategoryName,
-        description: targetCategoryDesc,
-        books: [],
-      };
-      targetCol.categories.push(targetCat);
-    }
-
-    targetCat.books.push(bookToMove);
-
-    setSource(newSource);
-    setTarget(newTarget);
   };
-
-  const activeData = activeTab === "LIBRARY" ? libraryData : marketplaceData;
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-paper animate-in slide-in-from-bottom-5 duration-300">
-      {/* --- Header --- */}
-      <div className="flex-none flex items-center justify-between px-6 h-20 border-b border-pencil/10 bg-paper/95 backdrop-blur-md z-10">
-        <h2 className="font-serif font-bold text-3xl text-ink tracking-tight">
-          {activeTab === "LIBRARY" ? "My Library" : "Marketplace"}
-        </h2>
-        <button
-          onClick={onClose}
-          className="p-2 rounded-full hover:bg-pencil/10 transition-colors group"
-        >
-          <X className="w-6 h-6 text-pencil group-hover:text-ink transition-colors" />
-        </button>
-      </div>
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-ink/20 backdrop-blur-sm z-[60] animate-in fade-in duration-300"
+        onClick={onClose}
+      />
 
-      {/* --- Tab Switcher --- */}
-      <div className="flex-none px-6 py-4 bg-paper border-b border-pencil/5">
-        <div className="flex p-1 bg-pencil/10 rounded-xl relative max-w-md mx-auto md:mx-0">
-          <div
-            className={cn(
-              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-sm transition-all duration-300 ease-spring",
-              activeTab === "MARKETPLACE"
-                ? "translate-x-[calc(100%+4px)]"
-                : "translate-x-0"
-            )}
-          />
+      {/* Pull-Down Panel */}
+      <div
+        className={cn(
+          "fixed z-[70] bg-paper shadow-2xl flex flex-col overflow-hidden transition-all duration-500 ease-spring",
+          // Mobile: Full screen, slide from top
+          "inset-x-0 top-0 h-full rounded-b-[2.5rem]",
+          // Desktop: Centered pull-down, max-width constrained, starts from top
+          "md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[600px] md:h-[85vh] md:top-4 md:rounded-[2.5rem]",
+          "animate-in slide-in-from-top-4 duration-500"
+        )}
+      >
+        {/* Row 1: Search & Close */}
+        <div className="px-6 pt-6 pb-4 flex items-center gap-4 bg-paper/95 backdrop-blur-xl shrink-0 z-20">
+          <div className="flex-1">
+            <LibrarySearch onNavigate={onClose} />
+          </div>
           <button
-            onClick={() => handleTabChange("LIBRARY")}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold z-10 transition-colors duration-300",
-              activeTab === "LIBRARY"
-                ? "text-ink"
-                : "text-pencil hover:text-ink"
-            )}
+            onClick={onClose}
+            className="w-10 h-10 rounded-full bg-pencil/5 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors shrink-0"
           >
-            <Book className="w-4 h-4" />
-            Library
-          </button>
-          <button
-            onClick={() => handleTabChange("MARKETPLACE")}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold z-10 transition-colors duration-300",
-              activeTab === "MARKETPLACE"
-                ? "text-ink"
-                : "text-pencil hover:text-ink"
-            )}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            Marketplace
+            <X className="w-5 h-5" />
           </button>
         </div>
-      </div>
 
-      {/* --- Content --- */}
-      <div className="flex-1 overflow-y-auto no-scrollbar p-6 pb-32">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-64 text-pencil/50 gap-4">
-            <Loader2 className="w-8 h-8 animate-spin" />
-            <p className="text-sm font-medium tracking-widest uppercase">
-              Loading Books...
-            </p>
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto space-y-12">
-            {activeData.map((col) => {
-              // Calculate total books in collection for the header
-              const totalBooks = col.categories.reduce(
-                (acc, cat) => acc + cat.books.length,
-                0
-              );
-              if (totalBooks === 0) return null;
+        {/* Row 2: Segmented Controls */}
+        <div className="px-6 pb-6 border-b border-pencil/5 bg-paper/95 backdrop-blur-xl shrink-0 z-20">
+          <SegmentedControl
+            value={activeTab}
+            onChange={(val) => setActiveTab(val as MenuTab)}
+            options={[
+              { value: "LIBRARY", label: "My Library", icon: Book },
+              { value: "MARKETPLACE", label: "Marketplace", icon: ShoppingBag },
+            ]}
+          />
+        </div>
 
-              return (
-                <div
-                  key={col.name}
-                  className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+        {/* Row 3: Content Area */}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-paper">
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Content Header with Back Button */}
+            <div className="flex items-center gap-3 min-h-[32px]">
+              {navState.level !== "CATEGORY" && (
+                <button
+                  onClick={handleBack}
+                  className="w-8 h-8 rounded-full bg-pencil/5 flex items-center justify-center hover:bg-pencil/10 transition-colors animate-in zoom-in-50"
                 >
-                  {/* Collection Header */}
-                  <div className="mb-6 pb-2 border-b-2 border-pencil/10">
-                    <div className="flex items-baseline justify-between mb-1">
-                      <h3 className="text-2xl font-serif font-bold text-ink">
-                        {col.name}
-                      </h3>
-                      <span className="text-xs font-bold text-pencil/50 uppercase tracking-widest bg-pencil/5 px-2 py-1 rounded">
-                        {totalBooks} Books
-                      </span>
-                    </div>
-                    {col.description && (
-                      <p className="text-sm text-pencil/70 max-w-2xl">
-                        {col.description}
-                      </p>
-                    )}
-                  </div>
+                  <ArrowLeft className="w-4 h-4 text-pencil" />
+                </button>
+              )}
 
-                  {/* Categories */}
-                  <div className="space-y-8 pl-0 md:pl-4">
-                    {col.categories.map((cat) => {
-                      if (cat.books.length === 0) return null;
-                      const isExpanded = expandedCategories[cat.name];
+              <div>
+                <h3 className="font-serif font-bold text-xl text-ink tracking-tight">
+                  {navState.level === "CATEGORY"
+                    ? activeTab === "LIBRARY"
+                      ? "Collections"
+                      : "Explore"
+                    : getBreadcrumb()}
+                </h3>
+                {navState.level === "CATEGORY" && (
+                  <p className="text-xs text-pencil/50 mt-0.5 font-medium">
+                    {activeTab === "LIBRARY"
+                      ? "Select a section to begin reading."
+                      : "Discover new texts and translations."}
+                  </p>
+                )}
+              </div>
+            </div>
 
-                      return (
-                        <div key={cat.name} className="relative">
-                          {/* Vertical line connector for hierarchy visual */}
-                          <div className="absolute left-[-16px] top-4 bottom-0 w-px bg-pencil/10 hidden md:block" />
-
-                          {/* Sub-Category Header */}
-                          <button
-                            onClick={() => toggleCategory(cat.name)}
-                            className="flex items-center gap-2 w-full text-left group mb-3"
-                          >
-                            <div className="p-1 rounded bg-pencil/10 text-pencil/60 group-hover:text-ink transition-colors">
-                              {isExpanded ? (
-                                <ChevronDown className="w-3 h-3" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3" />
-                              )}
-                            </div>
-                            <div>
-                              <h4 className="text-lg font-bold text-ink/80 group-hover:text-ink transition-colors">
-                                {cat.name}
-                              </h4>
-                            </div>
-                          </button>
-                          {cat.description && isExpanded && (
-                            <p className="text-xs text-pencil/60 mb-4 pl-7 max-w-xl">
-                              {cat.description}
-                            </p>
-                          )}
-
-                          {/* Books List */}
-                          {isExpanded && (
-                            <div className="grid grid-cols-1 gap-2 pl-2 md:pl-7">
-                              {cat.books.map((book) => (
-                                <div
-                                  key={book.slug}
-                                  className="group relative flex items-center justify-between p-4 rounded-xl bg-white border border-pencil/10 hover:border-gold/30 hover:shadow-sm transition-all"
-                                >
-                                  <a
-                                    href={`/library/${col.name
-                                      .toLowerCase()
-                                      .replace(/\s+/g, "-")}/${book.slug}/1`}
-                                    className="flex-1 flex flex-col gap-1 pr-4"
-                                  >
-                                    <div className="flex items-baseline gap-3">
-                                      <span
-                                        className={cn(
-                                          "font-serif text-lg font-bold transition-colors",
-                                          book.name === currentBook
-                                            ? "text-gold"
-                                            : "text-ink group-hover:text-gold"
-                                        )}
-                                      >
-                                        {book.name}
-                                      </span>
-                                      <span className="text-[10px] font-mono text-pencil/50 bg-pencil/5 px-1.5 py-0.5 rounded">
-                                        {book.chapters} Chapters
-                                      </span>
-                                    </div>
-                                    {book.description && (
-                                      <p className="text-xs text-pencil line-clamp-1 group-hover:line-clamp-none transition-all duration-300">
-                                        {book.description}
-                                      </p>
-                                    )}
-                                  </a>
-
-                                  {/* Action Button */}
-                                  <div className="shrink-0">
-                                    {activeTab === "MARKETPLACE" ? (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          moveBook(book.slug, "MARKETPLACE");
-                                        }}
-                                        className="p-2 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 transition-colors"
-                                        title="Add to Library"
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          moveBook(book.slug, "LIBRARY");
-                                        }}
-                                        className="p-2 rounded-full bg-pencil/5 text-pencil/40 hover:bg-red-50 hover:text-red-500 hover:border-red-100 border border-transparent transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                        title="Remove from Library"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-
-            {activeData.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-60">
-                <div className="w-16 h-16 rounded-full bg-pencil/5 flex items-center justify-center">
-                  <Book className="w-8 h-8 text-pencil/30" />
-                </div>
-                <p className="text-lg text-ink font-serif">
-                  Your {activeTab === "LIBRARY" ? "Library" : "Marketplace"} is
-                  empty.
-                </p>
+            {loading ? (
+              <div className="flex items-center justify-center py-20 text-pencil/40 text-sm font-medium">
+                Loading...
+              </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                {activeTab === "LIBRARY" ? (
+                  <LibraryMy
+                    data={libraryData}
+                    navState={navState}
+                    setNavState={setNavState}
+                    currentBook={currentBook}
+                    onClose={onClose}
+                  />
+                ) : (
+                  <LibraryMarketplace
+                    data={marketplaceData}
+                    navState={navState}
+                    setNavState={setNavState}
+                    currentBook={currentBook}
+                    onClose={onClose}
+                  />
+                )}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

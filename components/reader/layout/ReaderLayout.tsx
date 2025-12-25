@@ -20,7 +20,8 @@ export function ReaderLayout({
   sidePanels,
 }: ReaderLayoutProps) {
   // Calculate margins to shift content when panels open on desktop
-  const slideClass = isPanelOpen ? "md:mr-[400px] lg:mr-[450px]" : "";
+  // Matches new widths in MasterPanel: md:w-[480px] lg:w-[550px]
+  const slideClass = isPanelOpen ? "md:mr-[480px] lg:mr-[550px]" : "";
 
   return (
     <div className="min-h-screen bg-paper transition-colors duration-500 overflow-x-hidden relative">

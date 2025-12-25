@@ -41,8 +41,10 @@ export function ReaderContent({
   return (
     <div
       className={cn(
-        "mx-auto mt-6 px-4 md:px-12 pb-32",
-        displayMode === "bilingual-parallel" ? "max-w-[1600px]" : "max-w-4xl"
+        "mx-auto mt-6 pb-32 transition-all duration-300",
+        displayMode === "bilingual-parallel"
+          ? "max-w-[1800px] px-8 md:px-20 lg:px-32" // Increased horizontal padding for centered parallel view
+          : "max-w-4xl px-4 md:px-12"
       )}
       style={{ fontSize: `${fontSize}pt` } as CSSProperties}
     >
