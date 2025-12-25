@@ -1,87 +1,37 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Loader2, Library, Clock, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  fetchDailyLearning,
-  fetchUpcomingEvents,
-  DailySchedule,
-  UpcomingInfo,
-} from "@/lib/hebcal";
-import {
-  getParashaRedirect,
-  resolveStudyRef,
-  getUserProfile,
-  updateUserLocation,
-} from "@/app/actions";
 
-// Sub-components
-import ScheduleManager from "./today/ScheduleManager";
-import { LocationHeader } from "./today/LocationHeader";
-import { ZmanimCard } from "./today/ZmanimCard";
-import { LearningCycles } from "./today/LearningCycles";
-import { HolidayEvents } from "./today/HolidayEvents";
+// Components & Hooks
+import { StatusFooter } from "@/components/ui/status-footer";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { StudiesTab } from "./today/StudiesTab";
+import { EventsTab } from "./today/EventsTab";
+import { useTodayMenu } from "./today/useTodayMenu";
 
-interface TodayMenuProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+// Actions
+import { getParashaRedirect, resolveStudyRef } from "@/app/actions";
 
-type MenuTab = "TODAY" | "SCHEDULES";
+type TodayTab = "STUDIES" | "EVENTS";
 
 /**
  * components/reader/TodayMenu.tsx
- * The "Daily Sanctuary" sidebar.
- * Provides a high-end portal into daily study, timing, and personal schedules.
+ * Updated: Removed backdrop blur to maintain visual clarity on the text.
  */
-export function TodayMenu({ isOpen, onClose }: TodayMenuProps) {
+export function TodayMenu({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<MenuTab>("TODAY");
-  const [learning, setLearning] = useState<DailySchedule | null>(null);
-  const [calendar, setCalendar] = useState<UpcomingInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TodayTab>("STUDIES");
 
-  const [isEditingLocation, setIsEditingLocation] = useState(false);
-  const [locationName, setLocationName] = useState("Jerusalem");
-  const [zipInput, setZipInput] = useState("");
-
-  const initData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const profile = await getUserProfile();
-      const zip = profile?.location_zip;
-      if (zip) {
-        setLocationName(profile.location_name || "Saved Location");
-      }
-
-      const [learnData, calData] = await Promise.all([
-        fetchDailyLearning(),
-        fetchUpcomingEvents(zip),
-      ]);
-      setLearning(learnData);
-      setCalendar(calData);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) initData();
-  }, [isOpen, initData]);
-
-  const handleSaveLocation = async () => {
-    if (!zipInput || zipInput.length < 5) return;
-    setIsEditingLocation(false);
-    setLoading(true);
-    try {
-      await updateUserLocation(zipInput, `Zip: ${zipInput}`);
-      await initData();
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { state, actions } = useTodayMenu(isOpen);
 
   const handleStudyClick = async (type: string, name: string, ref: string) => {
     onClose();
@@ -102,128 +52,100 @@ export function TodayMenu({ isOpen, onClose }: TodayMenuProps) {
     day: "numeric",
   });
 
-  if (!isOpen) return null;
+  const jerusalemTime = new Date().toLocaleTimeString("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Responsive Backdrop: No blur, mobile-only */}
       <div
-        className="fixed inset-0 bg-black/10 backdrop-blur-sm z-[45] animate-in fade-in duration-500"
+        className={cn(
+          "fixed inset-0 bg-ink/5 z-[45] transition-opacity md:hidden",
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
         onClick={onClose}
       />
 
-      <aside className="fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8">
-        {/* Header */}
-        <div className="h-20 border-b border-pencil/5 flex items-center justify-between px-8 bg-paper/95 backdrop-blur-md shrink-0">
+      <aside
+        className={cn(
+          "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-500 ease-spring shadow-2xl flex flex-col overflow-hidden",
+          isOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        <div className="h-20 border-b border-pencil/10 flex items-center justify-between px-8 bg-paper/95 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-gold/10 flex items-center justify-center shadow-inner">
-              <Sparkles className="w-5 h-5 text-gold" />
+            <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center imprint-sm">
+              <Sparkles className="w-5 h-5 text-accent-foreground" />
             </div>
-            <h2 className="font-serif font-bold text-2xl text-ink tracking-tight">
-              Daily Sanctuary
+            <h2 className="text-2xl text-ink font-bold tracking-tight font-sans">
+              Sanctuary
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-3 rounded-full hover:bg-pencil/5 transition-all active:scale-75 group"
+            className="p-3 rounded-full hover:bg-pencil/5 transition-all group active:scale-90"
           >
             <X className="w-6 h-6 text-pencil group-hover:rotate-90 transition-transform duration-300" />
           </button>
         </div>
 
-        {/* Premium Segmented Control */}
-        <div className="px-8 py-6 bg-paper border-b border-pencil/[0.03]">
-          <div className="flex p-1.5 gap-1.5 bg-pencil/5 rounded-2xl relative">
-            <div
-              className={cn(
-                "absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] rounded-[0.8rem] bg-white shadow-xl shadow-black/5 transition-all duration-300 ease-spring",
-                activeTab === "SCHEDULES" ? "translate-x-full" : "translate-x-0"
-              )}
-            />
-            <button
-              onClick={() => setActiveTab("TODAY")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-[11px] font-black uppercase tracking-widest z-10 transition-colors duration-300",
-                activeTab === "TODAY"
-                  ? "text-ink"
-                  : "text-pencil/50 hover:text-pencil"
-              )}
-            >
-              <Clock className="w-4 h-4" />
-              Portal
-            </button>
-            <button
-              onClick={() => setActiveTab("SCHEDULES")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-[11px] font-black uppercase tracking-widest z-10 transition-colors duration-300",
-                activeTab === "SCHEDULES"
-                  ? "text-ink"
-                  : "text-pencil/50 hover:text-pencil"
-              )}
-            >
-              <Library className="w-4 h-4" />
-              Schedules
-            </button>
-          </div>
+        <div className="px-8 py-4 bg-paper border-b border-pencil/[0.03]">
+          <SegmentedControl
+            value={activeTab}
+            onChange={(val) => setActiveTab(val as TodayTab)}
+            options={[
+              { value: "STUDIES", label: "Studies", icon: Library },
+              { value: "EVENTS", label: "Events", icon: Clock },
+            ]}
+          />
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-8 space-y-10 pb-32">
-          {activeTab === "TODAY" ? (
-            loading && !calendar ? (
-              <div className="flex flex-col items-center justify-center py-24 space-y-6 text-pencil/20">
-                <Loader2 className="w-10 h-10 animate-spin" />
-                <p className="text-xs font-black uppercase tracking-[0.3em]">
-                  Gathering Wisdom...
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <LocationHeader
-                  isEditing={isEditingLocation}
-                  locationName={locationName}
-                  zipInput={zipInput}
-                  onZipChange={setZipInput}
-                  onSave={handleSaveLocation}
-                  onEditToggle={setIsEditingLocation}
-                />
-
-                <ZmanimCard calendar={calendar} />
-
-                <LearningCycles
-                  learning={learning}
-                  onStudyClick={handleStudyClick}
-                />
-
-                <HolidayEvents events={calendar?.events || []} />
-              </div>
-            )
+        <div className="flex-1 overflow-y-auto no-scrollbar p-8">
+          {state.loading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-30">
+              <Loader2 className="w-10 h-10 animate-spin" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] font-sans">
+                Gathering Wisdom...
+              </p>
+            </div>
+          ) : activeTab === "STUDIES" ? (
+            <StudiesTab
+              learning={state.learning}
+              onStudyClick={handleStudyClick}
+            />
           ) : (
-            <ScheduleManager />
+            <EventsTab
+              calendar={state.calendar}
+              locationName={state.locationName}
+              isEditing={state.isEditingLocation}
+              zipInput={state.zipInput}
+              onZipChange={actions.setZipInput}
+              onSave={actions.handleSaveLocation}
+              onDetect={actions.handleDetectLocation}
+              onCancel={() => actions.setIsEditingLocation(false)}
+              onEditToggle={() => actions.setIsEditingLocation(true)}
+            />
           )}
         </div>
 
-        {/* Sticky Utility Footer */}
-        <footer className="absolute bottom-0 left-0 right-0 p-6 border-t border-pencil/5 bg-paper/90 backdrop-blur-xl z-20 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[10px] text-pencil/50 uppercase font-black tracking-widest">
+        <StatusFooter className="justify-between px-8">
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-pencil font-bold uppercase tracking-widest leading-none font-sans">
               {todayDate}
-            </p>
-            <p className="text-[9px] text-gold font-bold uppercase tracking-tighter italic">
+            </span>
+            <span className="text-accent text-[9px] font-bold uppercase tracking-tighter font-sans">
               Sanctuary in Time
-            </p>
+            </span>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-ink font-mono font-bold">
-              Jerusalem:{" "}
-              {new Date().toLocaleTimeString("he-IL", {
-                timeZone: "Asia/Jerusalem",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </p>
+          <div className="flex items-center gap-2 text-ink">
+            <span className="font-mono font-bold text-[10px]">
+              Jerusalem: {jerusalemTime}
+            </span>
           </div>
-        </footer>
+        </StatusFooter>
       </aside>
     </>
   );

@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef, CSSProperties } from "react";
-import { cn } from "@/lib/utils";
+import { useCallback } from "react";
 import { useTextSettings } from "@/components/context/text-settings-context";
-import { ReaderHeader } from "@/components/reader/header/ReaderHeader";
-import { ReaderSidePanels } from "@/components/reader/ReaderSidePanels";
-import { ChapterList } from "@/components/reader/ChapterList";
 import { ChapterData, Verse } from "@/lib/types/library";
 import { useReaderInfiniteScroll } from "@/components/hooks/useReaderInfiniteScroll";
+
+// Segmented Hooks & Components
+import { useReaderPermissions } from "./hooks/useReaderPermissions";
+import { useReaderLayoutState } from "./hooks/useReaderLayoutState";
+import { useTranslationPersistence } from "./hooks/useTranslationPersistence";
+import { useReaderObservers } from "./hooks/useReaderObservers";
+import { ReaderLayout } from "./layout/ReaderLayout";
+import { ReaderContent } from "./layout/ReaderContent";
+import { ReaderHeaderWrapper } from "./layout/ReaderHeaderWrapper";
+import { ReaderSidePanelsWrapper } from "./layout/ReaderSidePanelsWrapper";
 
 interface InteractiveReaderProps {
   initialChapter: ChapterData;
@@ -16,207 +22,106 @@ interface InteractiveReaderProps {
 }
 
 /**
- * InteractiveReader
- * Main study interface for TorahPro.
- * Implements exclusive panel switching: only one slide panel can be open at a time.
+ * InteractiveReader (Orchestrator)
+ * Cohesion point for the reader experience.
+ * Updated: Resolved prop-mismatch error for ReaderHeaderWrapper.
  */
 export default function InteractiveReader({
   initialChapter,
   bookSlug,
+  activeTranslation,
 }: InteractiveReaderProps) {
   const { displayMode, fontSize } = useTextSettings();
 
-  // --- State Management ---
-  const [activeLayerId, setActiveLayerId] = useState<string>(
-    initialChapter.activeTranslation || "jps-1985"
+  // 1. Logic, Persistence & Permissions
+  const { activeLayerId, handleSelectLayer } = useTranslationPersistence(
+    initialChapter.activeTranslation || "jps-1985",
+    activeTranslation
   );
 
-  // Overlays
-  const [isNavOpen, setIsNavOpen] = useState(false);
-  const [isTransPanelOpen, setIsTransPanelOpen] = useState(false);
-  const [isTodayOpen, setIsTodayOpen] = useState(false);
+  const { canEdit, isVerifying } = useReaderPermissions(activeLayerId);
+  const layout = useReaderLayoutState(initialChapter);
 
-  // Content tracking
-  const [activeBook, setActiveBook] = useState(initialChapter?.book || "");
-  const [activeChapter, setActiveChapter] = useState(
-    initialChapter?.chapterNum || 0
-  );
-
-  // Verse Interaction (Triggers Commentary)
-  const [selectedVerseRef, setSelectedVerseRef] = useState<string | null>(null);
-  const [editingVerse, setEditingVerse] = useState<Verse | null>(null);
-
-  // --- Exclusive Panel Logic ---
-
-  const toggleTodayMenu = () => {
-    if (isTodayOpen) {
-      setIsTodayOpen(false);
-    } else {
-      // Open Today, close everything else
-      setIsTodayOpen(true);
-      setIsTransPanelOpen(false);
-      setSelectedVerseRef(null);
-    }
-  };
-
-  const openTranslations = () => {
-    setIsTransPanelOpen(true);
-    setIsTodayOpen(false);
-    setSelectedVerseRef(null);
-  };
-
-  const handleVerseSelection = (id: string) => {
-    if (selectedVerseRef === id) {
-      setSelectedVerseRef(null);
-    } else {
-      // Open Commentary for verse, close everything else
-      setSelectedVerseRef(id);
-      setIsTransPanelOpen(false);
-      setIsTodayOpen(false);
-      setEditingVerse(null);
-    }
-  };
-
-  // --- Infinite Scroll & Observers ---
+  // 2. Data Management (Infinite Scroll)
   const { chapters, isLoading, hasPrev, loadMore, loadPrev } =
     useReaderInfiniteScroll(initialChapter, activeLayerId);
 
-  const loaderRef = useRef<HTMLDivElement>(null);
-  const prevLoaderRef = useRef<HTMLDivElement>(null);
-  const chapterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // 3. Observer Management (Chapter Tracking & Scroll triggers)
+  const { loaderRef, prevLoaderRef, chapterRefs } = useReaderObservers({
+    loadMore,
+    loadPrev,
+    hasPrev,
+    chapters,
+    onChapterVisible: (bk, ch) => {
+      layout.setters.setActiveBook(bk);
+      layout.setters.setActiveChapter(ch);
+    },
+  });
 
-  useEffect(() => {
-    const options = { rootMargin: "1200px" };
-    const downObserver = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) loadMore();
-    }, options);
+  /**
+   * handleVerseClick
+   * Coordinates opening the commentary sidebar.
+   */
+  const handleVerseClick = useCallback(
+    (id: string) => {
+      if (layout.state.selectedVerseRef === id) {
+        layout.actions.clearSelection();
+      } else {
+        layout.actions.closeSideMenus();
+        layout.setters.setSelectedVerseRef(id);
+        layout.setters.setEditingVerse(null);
+      }
+    },
+    [layout]
+  );
 
-    const upObserver = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasPrev) loadPrev();
-      },
-      { rootMargin: "1200px 0px 0px 0px" }
-    );
-
-    const currentLoader = loaderRef.current;
-    const currentPrevLoader = prevLoaderRef.current;
-
-    if (currentLoader) downObserver.observe(currentLoader);
-    if (currentPrevLoader) upObserver.observe(currentPrevLoader);
-
-    return () => {
-      if (currentLoader) downObserver.unobserve(currentLoader);
-      if (currentPrevLoader) upObserver.unobserve(currentPrevLoader);
-    };
-  }, [loadMore, loadPrev, hasPrev]);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const bk = entry.target.getAttribute("data-book");
-            const ch = entry.target.getAttribute("data-chapter");
-            if (bk && ch) {
-              setActiveBook(bk);
-              setActiveChapter(parseInt(ch, 10));
-            }
-          }
-        });
-      },
-      { rootMargin: "-20% 0px -60% 0px" }
-    );
-    chapterRefs.current.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [chapters]);
-
-  // UI calculations for main content push
-  const isPanelOpen =
-    !!selectedVerseRef || !!editingVerse || isTransPanelOpen || isTodayOpen;
-  const slideClass = isPanelOpen ? "md:mr-[400px] lg:mr-[450px]" : "";
+  /**
+   * handleLongPress
+   * Coordinates opening the Sovereignty Editor.
+   */
+  const handleLongPress = useCallback(
+    (v: Verse) => {
+      if (canEdit && !isVerifying) {
+        layout.actions.closeSideMenus();
+        layout.setters.setEditingVerse(v);
+        layout.setters.setSelectedVerseRef(null);
+      }
+    },
+    [canEdit, isVerifying, layout]
+  );
 
   return (
-    <div className="min-h-screen bg-paper transition-colors duration-500 overflow-x-hidden relative">
-      <ReaderSidePanels
-        isNavOpen={isNavOpen}
-        setIsNavOpen={setIsNavOpen}
-        activeBook={activeBook}
-        activeChapter={activeChapter}
-        selectedVerseRef={selectedVerseRef}
-        setSelectedVerseRef={setSelectedVerseRef}
-        isTransPanelOpen={isTransPanelOpen}
-        setIsTransPanelOpen={setIsTransPanelOpen}
-        isTodayOpen={isTodayOpen}
-        setIsTodayOpen={setIsTodayOpen}
-        activeLayerId={activeLayerId}
-        setActiveLayerId={setActiveLayerId}
-        editingVerse={editingVerse}
-        setEditingVerse={setEditingVerse}
-        bookSlug={bookSlug}
-      />
-
-      <div
-        className={cn(
-          "fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-spring",
-          slideClass
-        )}
-      >
-        <ReaderHeader
-          activeBook={activeBook}
-          activeChapter={activeChapter}
-          onOpenNav={() => setIsNavOpen(true)}
-          onOpenTranslations={openTranslations}
-          onToggleToday={toggleTodayMenu}
-          isTodayActive={isTodayOpen}
-          activeVersionId={activeLayerId}
-          onSelectVersion={setActiveLayerId}
+    <ReaderLayout
+      isPanelOpen={layout.state.isPanelOpen}
+      header={
+        <ReaderHeaderWrapper
+          layout={layout}
+          // Legacy translation props removed to resolve TypeScript error
         />
-      </div>
-
-      <main
-        className={cn(
-          "transition-all duration-300 ease-spring pt-14",
-          slideClass
-        )}
-      >
-        <div
-          className={cn(
-            "mx-auto mt-6 px-4 md:px-12 pb-32",
-            displayMode === "bilingual-parallel"
-              ? "max-w-[1600px]"
-              : "max-w-4xl"
-          )}
-          style={{ fontSize: `${fontSize}pt` } as CSSProperties}
-        >
-          <div
-            ref={prevLoaderRef}
-            className={cn(
-              "h-32 flex items-center justify-center transition-opacity duration-300",
-              !hasPrev && "hidden"
-            )}
-          />
-          <ChapterList
-            chapters={chapters}
-            chapterRefs={chapterRefs}
-            selectedVerseRef={selectedVerseRef}
-            onVerseClick={handleVerseSelection}
-            onVerseLongPress={(v) => {
-              setEditingVerse(v);
-              setSelectedVerseRef(null);
-              setIsTransPanelOpen(false);
-              setIsTodayOpen(false);
-            }}
-          />
-          <div
-            ref={loaderRef}
-            className="h-48 flex items-center justify-center"
-          >
-            {isLoading && (
-              <div className="w-6 h-6 border-2 border-pencil/30 border-t-gold rounded-full animate-spin" />
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+      }
+      sidePanels={
+        <ReaderSidePanelsWrapper
+          layout={layout}
+          activeLayerId={activeLayerId}
+          onSelectLayer={handleSelectLayer}
+          bookSlug={bookSlug}
+        />
+      }
+    >
+      <ReaderContent
+        displayMode={displayMode}
+        fontSize={fontSize}
+        hasPrev={hasPrev}
+        prevLoaderRef={prevLoaderRef}
+        loaderRef={loaderRef}
+        isLoading={isLoading}
+        chapters={chapters}
+        chapterRefs={chapterRefs}
+        selectedVerseRef={layout.state.selectedVerseRef}
+        canEdit={canEdit}
+        onVerseClick={handleVerseClick}
+        onVerseLongPress={handleLongPress}
+      />
+    </ReaderLayout>
   );
 }

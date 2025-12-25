@@ -5,30 +5,40 @@ import { cn } from "@/lib/utils";
 
 /**
  * components/ui/button.tsx
- * Reusable button primitive with variants for the Paper & Ink design system.
+ * Updated with high-fidelity "imprinted" UI logic.
+ * Switched to Powder Blue accents and a tactile "pressed-into-paper" aesthetic.
  */
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.96]",
   {
     variants: {
       variant: {
+        // Main action button - Charcoal with soft elevation
         default:
-          "bg-ink text-paper shadow hover:bg-charcoal dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200",
+          "bg-charcoal text-paper shadow-sm hover:bg-ink transition-colors",
+        // The "Pressed into Paper" aesthetic
+        imprinted:
+          "bg-paper border border-black/[0.03] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.07)] text-charcoal hover:text-ink hover:bg-white transition-all",
+        // Powder Blue Accent - Used for active states and primary highlights
+        accent:
+          "bg-[#A5C3D1] text-white shadow-sm hover:bg-[#94B2C0] transition-colors font-bold tracking-tight",
+        // Subdued variant with light imprinting
+        secondary:
+          "bg-pencil/5 text-charcoal hover:bg-pencil/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]",
+        // Outlined version for secondary actions
+        outline:
+          "border border-pencil/20 bg-transparent text-charcoal hover:bg-pencil/5 hover:text-ink shadow-[inset_0_1px_1px_rgba(255,255,255,0.5)]",
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-        outline:
-          "border border-pencil/20 bg-transparent shadow-sm hover:bg-black/5 hover:text-ink dark:border-white/10 dark:hover:bg-white/5",
-        secondary: "bg-pencil/10 text-ink shadow-sm hover:bg-pencil/20",
-        ghost: "hover:bg-black/5 hover:text-ink dark:hover:bg-white/5",
+        ghost: "hover:bg-pencil/5 hover:text-ink text-pencil transition-colors",
         link: "text-ink underline-offset-4 hover:underline",
-        gold: "bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-11 rounded-full px-8 text-base",
-        icon: "h-9 w-9 rounded-full",
+        default: "h-10 px-5 py-2 rounded-xl",
+        sm: "h-8 rounded-lg px-3 text-xs",
+        lg: "h-12 rounded-[1.2rem] px-10 text-base",
+        icon: "h-10 w-10 rounded-full",
       },
     },
     defaultVariants: {

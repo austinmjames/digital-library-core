@@ -10,19 +10,21 @@ interface ChapterProps {
   verses: Verse[];
   chapterNum: number;
   selectedVerseId?: string | null;
+  canEdit: boolean;
   onVerseClick: (verseId: string) => void;
   onVerseLongPress: (verse: Verse) => void;
 }
 
 /**
  * components/reader/Chapter.tsx
- * Optimized reader view for the TorahPro library.
- * Features iOS-style long-press gestures, haptic feedback simulation, and bilingual layouts.
+ * Updated: Refined with modern UI typography (Segoe UI/Inter) and a tactile "imprinted" feel.
+ * Replaced gold accents with Powder Blue and simplified the hierarchy for a cleaner scholarly look.
  */
 const Chapter = memo(
   ({
     verses,
     selectedVerseId,
+    canEdit,
     onVerseClick,
     onVerseLongPress,
   }: ChapterProps) => {
@@ -39,25 +41,21 @@ const Chapter = memo(
 
     /**
      * startPress
-     * Initiates the long-press timer. 500ms is the standard iOS threshold.
+     * Initiates the long-press timer only if editing is allowed.
      */
     const startPress = useCallback(
       (verse: Verse) => {
+        if (!canEdit) return;
         longPressTimer.current = setTimeout(() => {
           onVerseLongPress(verse);
-          // Subtle haptic feedback if the browser/device supports it
           if (typeof window !== "undefined" && window.navigator.vibrate) {
             window.navigator.vibrate(10);
           }
         }, 500);
       },
-      [onVerseLongPress]
+      [onVerseLongPress, canEdit]
     );
 
-    /**
-     * endPress
-     * Cancels the long-press timer if the user releases early (standard click).
-     */
     const endPress = useCallback(() => {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
@@ -92,7 +90,7 @@ const Chapter = memo(
     };
 
     return (
-      <article className="animate-in fade-in duration-700">
+      <article className="animate-in fade-in duration-700 font-sans">
         <div
           className={cn("space-y-4", isParallel ? "space-y-8" : "space-y-4")}
         >
@@ -101,19 +99,19 @@ const Chapter = memo(
 
             return (
               <React.Fragment key={verse.id}>
-                {/* Section/Parashah Markers (e.g., Parashat Bereshit) */}
+                {/* Modern Parshah Header */}
                 {verse.parashaStart && (
-                  <div className="py-16 flex items-center justify-center select-none">
-                    <div className="flex flex-col items-center gap-3">
-                      <h3 className="text-xl md:text-2xl font-serif font-bold text-pencil/40 italic tracking-widest uppercase">
+                  <div className="py-20 flex items-center justify-center select-none">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="h-px w-8 bg-pencil/10" />
+                      <h3 className="text-xs font-black text-pencil/40 uppercase tracking-[0.5em] text-center leading-none">
                         {verse.parashaStart}
                       </h3>
-                      <div className="h-px w-24 bg-gold/20" />
+                      <div className="h-px w-8 bg-pencil/10" />
                     </div>
                   </div>
                 )}
 
-                {/* Verse Container */}
                 <div
                   onClick={() => onVerseClick(verse.id)}
                   onMouseDown={() => startPress(verse)}
@@ -122,37 +120,37 @@ const Chapter = memo(
                   onTouchStart={() => startPress(verse)}
                   onTouchEnd={endPress}
                   className={cn(
-                    "group relative transition-all duration-500 rounded-2xl p-4 md:p-6 cursor-pointer border select-none",
+                    "group relative transition-all duration-500 rounded-2xl p-4 md:p-8 cursor-pointer border select-none",
                     isSelected
-                      ? "bg-highlight border-gold/30 shadow-sm scale-[1.01]"
+                      ? "bg-highlight/50 border-accent/20 shadow-[inset_0_1px_4px_rgba(0,0,0,0.02)]"
                       : "bg-transparent border-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01]",
                     isParallel
-                      ? "grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-start"
-                      : "flex flex-col gap-4"
+                      ? "grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-20 items-start"
+                      : "flex flex-col gap-5"
                   )}
                 >
-                  {/* Floating Action Hint - Appears on hover for desktop */}
-                  <div className="absolute top-2 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                    <span className="text-[9px] font-bold text-pencil uppercase tracking-tighter">
-                      Long-press to translate
-                    </span>
-                    <Edit3 className="w-3 h-3 text-gold/50" />
-                  </div>
+                  {/* Floating Action Hint */}
+                  {canEdit && (
+                    <div className="absolute top-3 right-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                      <span className="text-[8px] font-bold text-pencil/40 uppercase tracking-widest">
+                        Interpret
+                      </span>
+                      <Edit3 className="w-3 h-3 text-accent" />
+                    </div>
+                  )}
 
-                  {/* Hebrew Layer */}
                   {showHebrew && (
                     <div
                       className={cn(
-                        "hebrew-text text-ink text-right relative leading-[1.8]",
+                        "hebrew-text text-ink text-right relative leading-[1.85]",
                         isParallel ? "order-2" : "w-full max-w-3xl ml-auto"
                       )}
                       style={{ fontSize: `${fontSize}pt` }}
                     >
-                      {/* Hebrew Chapter/Verse Indicator */}
                       <span
                         className={cn(
-                          "absolute -right-10 top-1 text-base font-serif select-none w-8 text-center transition-colors",
-                          isSelected ? "text-gold font-bold" : "text-pencil/20"
+                          "absolute -right-12 top-1 text-sm font-semibold select-none w-10 text-center transition-colors font-sans",
+                          isSelected ? "text-accent" : "text-pencil/15"
                         )}
                       >
                         {toHebrewNumeral(verse.c2_index)}
@@ -164,26 +162,22 @@ const Chapter = memo(
                     </div>
                   )}
 
-                  {/* English Layer */}
                   {showEnglish && (
                     <div
                       className={cn(
-                        "english-text text-ink/80 text-left relative leading-[1.6]",
+                        "english-text text-ink/80 text-left relative leading-[1.65]",
                         isParallel ? "order-1" : "w-full max-w-3xl mr-auto"
                       )}
-                      style={{ fontSize: `${fontSize * 0.85}pt` }}
+                      style={{ fontSize: `${fontSize * 0.88}pt` }}
                     >
-                      {/* Visual separator for stacked view */}
                       {isStacked && showHebrew && (
-                        <div className="h-px w-6 bg-gold/10 mb-4" />
+                        <div className="h-px w-6 bg-pencil/5 mb-6" />
                       )}
-
-                      {/* English Chapter/Verse Indicator */}
                       <span
                         className={cn(
-                          "absolute -left-10 top-1 text-[10px] font-mono select-none block w-8 text-center pt-1 transition-colors",
-                          displayMode === "english" && "text-base",
-                          isSelected ? "text-gold font-bold" : "text-pencil/20"
+                          "absolute -left-12 top-1 text-[10px] font-bold select-none block w-10 text-center pt-1 transition-colors font-sans",
+                          displayMode === "english" && "text-sm",
+                          isSelected ? "text-accent" : "text-pencil/15"
                         )}
                       >
                         {verse.c2_index}

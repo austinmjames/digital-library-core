@@ -11,34 +11,29 @@ import {
 } from "@/lib/types/library";
 
 /**
- * Internal interfaces for raw Supabase response shapes.
- * This resolves the "Unexpected any" errors by explicitly typing DB results.
+ * DB Row interfaces to satisfy strict typing and remove 'any'
  */
-interface DBAuthorMetadata {
-  author_name: string;
-  era?: string;
-  died?: string;
-  description_en?: string;
-}
-
-interface DBOwnedCollection {
+interface CommentaryCollectionRow {
   id: string;
   name: string;
+  description: string | null;
+  author_display_name: string | null;
   owner_id: string;
   is_collaborative: boolean;
-  share_code?: string;
-  metadata?: DBAuthorMetadata[];
+  share_code: string | null;
+  install_count: number | null;
+  metadata?: AuthorMetadata[];
 }
 
-interface DBSharedCollection {
+interface CollaboratorRow {
   is_in_library: boolean;
-  permission: "collaborator" | "viewer";
-  collection: DBOwnedCollection;
+  permission: "owner" | "collaborator" | "viewer";
+  collection: CommentaryCollectionRow;
 }
 
 /**
  * useCommentaryData
- * Strictly typed hook for managing commentary state and metadata mapping.
+ * Updated to remove 'any' and strictly type Supabase response mappings.
  */
 export function useCommentaryData(verseRef: string | null, user: User | null) {
   const [commentaries, setCommentaries] = useState<Commentary[]>([]);
@@ -85,51 +80,39 @@ export function useCommentaryData(verseRef: string | null, user: User | null) {
       setCommentaries((libRes.data as Commentary[]) || []);
       setUserCommentaries((userRes.data as unknown as UserCommentary[]) || []);
 
-      // Mapping owned projects with explicit types
       const ownedMapped: CollectionMetadata[] = (
-        (ownedRes.data as unknown as DBOwnedCollection[]) || []
+        (ownedRes.data as CommentaryCollectionRow[]) || []
       ).map((c) => ({
         id: c.id,
         name: c.name,
+        description: c.description || "",
+        author_display_name: c.author_display_name || "",
         owner_id: c.owner_id,
         permission: "owner" as const,
         is_collaborative: c.is_collaborative,
-        share_code: c.share_code,
+        share_code: c.share_code || undefined,
         is_in_library: true,
-        metadata: c.metadata?.[0]
-          ? ({
-              author_name: c.metadata[0].author_name,
-              era: c.metadata[0].era,
-              died: c.metadata[0].died,
-              description_en: c.metadata[0].description_en,
-            } as AuthorMetadata)
-          : undefined,
+        install_count: c.install_count || 0,
+        metadata: c.metadata?.[0] as AuthorMetadata,
       }));
 
-      // Mapping shared projects with explicit types
       const sharedMapped: CollectionMetadata[] = (
-        (sharedRes.data as unknown as DBSharedCollection[]) || []
+        (sharedRes.data as unknown as CollaboratorRow[]) || []
       ).map((s) => ({
         id: s.collection.id,
         name: s.collection.name,
+        description: s.collection.description || "",
+        author_display_name: s.collection.author_display_name || "",
         owner_id: s.collection.owner_id,
         permission: s.permission,
         is_collaborative: s.collection.is_collaborative,
-        share_code: s.collection.share_code,
+        share_code: s.collection.share_code || undefined,
         is_in_library: s.is_in_library,
-        metadata: s.collection.metadata?.[0]
-          ? ({
-              author_name: s.collection.metadata[0].author_name,
-              era: s.collection.metadata[0].era,
-              died: s.collection.metadata[0].died,
-              description_en: s.collection.metadata[0].description_en,
-            } as AuthorMetadata)
-          : undefined,
+        install_count: s.collection.install_count || 0,
+        metadata: s.collection.metadata?.[0] as AuthorMetadata,
       }));
 
       const all = [...ownedMapped, ...sharedMapped];
-
-      // Default fallback
       if (all.length === 0) {
         all.push({
           id: "default",
@@ -138,9 +121,9 @@ export function useCommentaryData(verseRef: string | null, user: User | null) {
           permission: "owner",
           is_in_library: true,
           is_collaborative: false,
+          install_count: 0,
         });
       }
-
       setCollections(all);
     } finally {
       setLoading(false);

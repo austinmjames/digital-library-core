@@ -1,145 +1,39 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { useAuth } from "@/components/context/auth-context";
-import { useCommentaryData } from "./commentary/useCommentaryData";
-import { CommentaryHeader, CommentaryTab } from "./commentary/CommentaryHeader";
+
+// Logic Hook
+import { useCommentaryPanel } from "./commentary/useCommentaryPanel";
+
+// Sub-components
+import { CommentaryHeader } from "./commentary/CommentaryHeader";
 import { CommentaryTabs } from "./commentary/CommentaryTabs";
 import { NoteEditor } from "./commentary/NoteEditor";
 import { ManagementView } from "./commentary/ManagementView";
-import { MarketplaceView } from "./commentary/MarketplaceView";
 import { DiscussionView } from "./commentary/DiscussionView";
 import { LibraryView } from "./commentary/LibraryView";
-import {
-  Commentary,
-  UserCommentary,
-  CommentaryGroup,
-} from "@/lib/types/library";
+import { CommentaryFooter } from "./commentary/CommentaryFooter";
+
+interface CommentaryPanelProps {
+  verseRef: string | null;
+  onClose: () => void;
+}
 
 /**
  * components/reader/CommentaryPanel.tsx
- * Orchestrator for the verse-specific detail view.
- * Refactored to match the premium architecture of TodayMenu.
+ * Updated: backdrop adjusted to md:hidden and blur removed for better desktop usability.
  */
-export function CommentaryPanel({
-  verseRef,
-  onClose,
-}: {
-  verseRef: string | null;
-  onClose: () => void;
-}) {
-  const { user } = useAuth();
-  const supabase = createClient();
-  const { commentaries, userCommentaries, collections, loading, refetch } =
-    useCommentaryData(verseRef, user);
-
-  // UI State
-  const [activeTab, setActiveTab] = useState<CommentaryTab>("MY_COMMENTARIES");
-  const [languageMode, setLanguageMode] = useState<"en" | "he" | "bilingual">(
-    "bilingual"
-  );
-  const [showFootnotes, setShowFootnotes] = useState(false);
-  const [myAuthors, setMyAuthors] = useState<string[]>(["Rashi", "רש״י"]);
-  const [selectedCollection, setSelectedCollection] =
-    useState<string>("My Commentary");
-  const [isSaving, setIsSaving] = useState(false);
-
+export function CommentaryPanel({ verseRef, onClose }: CommentaryPanelProps) {
+  const { state, actions, supabase } = useCommentaryPanel(verseRef);
   const isOpen = !!verseRef;
-
-  // Grouping logic memoized for performance
-  const groupedData = useMemo(() => {
-    const groups: Record<
-      CommentaryGroup,
-      Record<string, (Commentary | UserCommentary)[]>
-    > = {
-      Personal: {},
-      Classic: {},
-      Community: {},
-    };
-
-    commentaries.forEach((comm) => {
-      const author = comm.author_en || comm.author_he || "Unknown";
-      if (activeTab === "MY_COMMENTARIES" && !myAuthors.includes(author))
-        return;
-      const group = comm.source_ref?.includes("Community")
-        ? "Community"
-        : "Classic";
-      if (!groups[group][author]) groups[group][author] = [];
-      groups[group][author].push(comm);
-    });
-
-    userCommentaries.forEach((note) => {
-      const collMeta = collections.find((c) => c.name === note.collection_name);
-      if (
-        activeTab === "MY_COMMENTARIES" &&
-        collMeta &&
-        !collMeta.is_in_library
-      )
-        return;
-      if (!groups["Personal"][note.collection_name])
-        groups["Personal"][note.collection_name] = [];
-      groups["Personal"][note.collection_name].push(note);
-    });
-
-    return groups;
-  }, [commentaries, userCommentaries, activeTab, myAuthors, collections]);
-
-  // --- Collection Actions (Delegated from sub-views) ---
-
-  const handleCreateCollection = useCallback(
-    async (name: string, isCollab: boolean) => {
-      if (!user) return;
-      const shareCode = `TORAH-${Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase()}`;
-      await supabase.from("commentary_collections").insert({
-        name,
-        owner_id: user.id,
-        is_collaborative: isCollab,
-        share_code: shareCode,
-      });
-      await refetch();
-    },
-    [user, supabase, refetch]
-  );
-
-  const handleSaveNote = useCallback(
-    async (content: string, collectionName: string) => {
-      if (!user || !verseRef) return;
-      setIsSaving(true);
-      try {
-        const parts = verseRef.split(" ");
-        const nums = parts[parts.length - 1].split(":");
-        const coll = collections.find((c) => c.name === collectionName);
-
-        await supabase.from("user_commentaries").insert({
-          user_id: user.id,
-          user_email: user.email,
-          verse_ref: verseRef,
-          book_slug: parts[0].toLowerCase(),
-          chapter_num: parseInt(nums[0]),
-          verse_num: parseInt(nums[1]),
-          content,
-          collection_name: collectionName,
-          collection_id: coll?.id !== "default" ? coll?.id : null,
-        });
-        await refetch();
-      } finally {
-        setIsSaving(false);
-      }
-    },
-    [user, verseRef, collections, supabase, refetch]
-  );
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Responsive Backdrop: Mobile-only, no blur */}
       <div
         className={cn(
-          "fixed inset-0 bg-black/10 backdrop-blur-sm z-[45] transition-opacity md:hidden",
+          "fixed inset-0 bg-black/5 z-[45] transition-opacity md:hidden",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
@@ -151,66 +45,63 @@ export function CommentaryPanel({
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        {/* iOS Header - Settings and Metadata only */}
         <CommentaryHeader
           verseRef={verseRef || ""}
-          languageMode={languageMode}
-          setLanguageMode={setLanguageMode}
-          showFootnotes={showFootnotes}
-          setShowFootnotes={setShowFootnotes}
+          languageMode={state.languageMode}
+          setLanguageMode={actions.setLanguageMode}
+          showFootnotes={state.showFootnotes}
+          setShowFootnotes={actions.setShowFootnotes}
           onClose={onClose}
         />
 
-        {/* Premium Segmented Tabs - Unified Navigation */}
         <CommentaryTabs
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          hasUser={!!user}
+          activeTab={state.activeTab}
+          setActiveTab={actions.setActiveTab}
+          hasUser={!!state.user}
         />
 
-        {/* Dynamic Content Area */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 pb-32">
-          {activeTab === "MANAGE_BOOKS" ? (
+          {state.activeTab === "MANAGE_BOOKS" ? (
             <ManagementView
-              collections={collections}
-              onBack={() => setActiveTab("MY_COMMENTARIES")}
+              collections={state.collections}
+              onBack={() => actions.setActiveTab("MY_COMMENTARIES")}
               onRename={async (old, newN) => {
                 await supabase
                   .from("commentary_collections")
                   .update({ name: newN })
-                  .eq("owner_id", user?.id)
+                  .eq("owner_id", state.user?.id)
                   .eq("name", old);
-                await refetch();
+                await actions.refetch();
               }}
               onDelete={async (name) => {
                 if (confirm(`Delete "${name}"?`)) {
                   await supabase
                     .from("commentary_collections")
                     .delete()
-                    .eq("owner_id", user?.id)
+                    .eq("owner_id", state.user?.id)
                     .eq("name", name);
-                  await refetch();
+                  await actions.refetch();
                 }
               }}
-              onCreate={handleCreateCollection}
-              onImport={async (code) => {
+              onCreate={actions.handleCreateCollection}
+              onImport={async (code: string) => {
                 const { data } = await supabase
                   .from("commentary_collections")
                   .select("id")
                   .eq("share_code", code.toUpperCase())
                   .single();
-                if (!data || !user?.email) return false;
+                if (!data || !state.user?.email) return false;
                 await supabase.from("collection_collaborators").upsert({
                   collection_id: data.id,
-                  user_email: user.email,
+                  user_email: state.user.email,
                   permission: "viewer",
                   is_in_library: true,
                 });
-                await refetch();
+                await actions.refetch();
                 return true;
               }}
               onShare={async (name, email, perm) => {
-                const coll = collections.find((c) => c.name === name);
+                const coll = state.collections.find((c) => c.name === name);
                 if (coll) {
                   await supabase.from("collection_collaborators").upsert({
                     collection_id: coll.id,
@@ -218,63 +109,35 @@ export function CommentaryPanel({
                     permission: perm,
                     is_in_library: true,
                   });
-                  await refetch();
+                  await actions.refetch();
                 }
               }}
               onStopCollaborating={async () => {}}
             />
-          ) : activeTab === "MARKETPLACE" ? (
-            <MarketplaceView
-              loading={loading}
-              groupedData={groupedData}
-              collections={collections}
-              onImport={async () => false}
-              myAuthors={myAuthors}
-              onToggleAuthor={(a) =>
-                setMyAuthors((p) =>
-                  p.includes(a) ? p.filter((x) => x !== a) : [...p, a]
-                )
-              }
-            />
-          ) : activeTab === "DISCUSSION" ? (
-            <DiscussionView verseRef={verseRef || ""} user={user} />
+          ) : state.activeTab === "DISCUSSION" ? (
+            <DiscussionView verseRef={verseRef || ""} user={state.user} />
           ) : (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {user && (
+              {state.user && (
                 <NoteEditor
-                  collections={collections}
-                  selectedCollection={selectedCollection}
-                  onSelectCollection={setSelectedCollection}
-                  onSave={handleSaveNote}
-                  isSaving={isSaving}
+                  collections={state.collections}
+                  selectedCollection={state.selectedCollection}
+                  onSelectCollection={actions.setSelectedCollection}
+                  onSave={actions.handleSaveNote}
+                  isSaving={state.isSaving}
                 />
               )}
               <LibraryView
-                groupedData={groupedData}
-                collections={collections}
-                languageMode={languageMode}
-                showFootnotes={showFootnotes}
+                groupedData={state.groupedData}
+                collections={state.collections}
+                languageMode={state.languageMode}
+                showFootnotes={state.showFootnotes}
               />
             </div>
           )}
         </div>
 
-        {/* Sticky Status Footer */}
-        <footer className="absolute bottom-0 left-0 right-0 p-6 border-t border-pencil/5 bg-paper/90 backdrop-blur-xl z-20 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[10px] text-pencil/50 uppercase font-black tracking-widest">
-              Verse Context
-            </p>
-            <p className="text-[9px] text-gold font-bold uppercase tracking-tighter italic">
-              Sovereignty & Commentary
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="text-[9px] font-bold text-pencil/30 uppercase tracking-widest">
-              Synced Layers
-            </span>
-          </div>
-        </footer>
+        <CommentaryFooter />
       </aside>
     </>
   );

@@ -8,18 +8,20 @@ interface ChapterListProps {
   chapters: ChapterData[];
   chapterRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
   selectedVerseRef: string | null;
+  canEdit: boolean; // New Prop
   onVerseClick: (id: string) => void;
   onVerseLongPress: (v: Verse) => void;
 }
 
 /**
  * ChapterList
- * Handles the mapping and individual rendering of chapters in the infinite scroll.
+ * Handles mapping chapters and passing permission state down.
  */
 export function ChapterList({
   chapters,
   chapterRefs,
   selectedVerseRef,
+  canEdit,
   onVerseClick,
   onVerseLongPress,
 }: ChapterListProps) {
@@ -48,6 +50,7 @@ export function ChapterList({
             verses={chapterData.verses}
             chapterNum={chapterData.chapterNum}
             selectedVerseId={selectedVerseRef}
+            canEdit={canEdit}
             onVerseClick={onVerseClick}
             onVerseLongPress={onVerseLongPress}
           />

@@ -1,90 +1,81 @@
 "use client";
 
 import React from "react";
-import { NavigationMenu } from "./NavigationMenu";
-import { CommentaryPanel } from "./CommentaryPanel";
-import { TranslationPanel } from "./TranslationPanel";
-import { TranslationEditor } from "./TranslationEditor";
 import { TodayMenu } from "./TodayMenu";
+import { CommentaryPanel } from "./CommentaryPanel";
+import { MarketplacePanel } from "./MarketplacePanel";
+import { TranslationPanel } from "./TranslationPanel";
+import { ProfilePanel } from "./ProfilePanel";
+import { AppearancePanel } from "./AppearancePanel";
 import { Verse } from "@/lib/types/library";
 
-interface ReaderSidePanelsProps {
-  isNavOpen: boolean;
-  setIsNavOpen: (open: boolean) => void;
-  activeBook: string;
-  activeChapter: number;
-  selectedVerseRef: string | null;
-  setSelectedVerseRef: (ref: string | null) => void;
-  isTransPanelOpen: boolean;
-  setIsTransPanelOpen: (open: boolean) => void;
+/**
+ * ReaderSidePanelProps
+ * Standardized interface for the Side Panel orchestrator.
+ * Updated: Included translation selection props for the unified Appearance panel.
+ */
+export interface ReaderSidePanelProps {
+  onClose: () => void;
+  verseRef: string | null;
+  // Visibility States
   isTodayOpen: boolean;
-  setIsTodayOpen: (open: boolean) => void;
+  isMarketplaceOpen: boolean;
+  isTransPanelOpen: boolean;
+  isProfileOpen: boolean;
+  isAppearanceOpen: boolean;
+  // Context & Handlers for Appearance/Translation
   activeLayerId: string;
-  setActiveLayerId: (id: string) => void;
-  // Validating these exist
-  editingVerse: Verse | null;
-  setEditingVerse: (verse: Verse | null) => void;
+  onSelectLayer: (id: string) => void;
+  onOpenTranslations: () => void;
+  // Commentary/Editor Context
+  setSelectedVerseRef?: (id: string | null) => void;
+  editingVerse?: Verse | null;
+  setEditingVerse?: (val: Verse | null) => void;
   bookSlug?: string;
 }
 
 /**
- * ReaderSidePanels
- * Manages all overlay interactions (Navigation, Commentary, Translations, Today Menu, and the Editor).
+ * components/reader/ReaderSidePanels.tsx
+ * Master orchestrator for all sidebar panels.
+ * Now proxies translation selection logic to the AppearancePanel.
  */
 export function ReaderSidePanels({
-  isNavOpen,
-  setIsNavOpen,
-  activeBook,
-  activeChapter,
-  selectedVerseRef,
-  setSelectedVerseRef,
-  isTransPanelOpen,
-  setIsTransPanelOpen,
+  onClose,
+  verseRef,
   isTodayOpen,
-  setIsTodayOpen,
+  isMarketplaceOpen,
+  isTransPanelOpen,
+  isProfileOpen,
+  isAppearanceOpen,
   activeLayerId,
-  setActiveLayerId,
-  editingVerse,
-  setEditingVerse,
-  bookSlug,
-}: ReaderSidePanelsProps) {
+  onSelectLayer,
+  onOpenTranslations,
+}: ReaderSidePanelProps) {
   return (
     <>
-      <NavigationMenu
-        isOpen={isNavOpen}
-        onClose={() => setIsNavOpen(false)}
-        currentBook={activeBook}
-      />
+      {/* 1. Daily Sanctuary (TodayMenu) */}
+      <TodayMenu isOpen={isTodayOpen} onClose={onClose} />
 
-      <TodayMenu isOpen={isTodayOpen} onClose={() => setIsTodayOpen(false)} />
+      {/* 2. Verse Detail Panel */}
+      <CommentaryPanel verseRef={verseRef} onClose={onClose} />
 
-      <CommentaryPanel
-        verseRef={selectedVerseRef}
-        onClose={() => setSelectedVerseRef(null)}
-      />
+      {/* 3. Global Discovery (Marketplace) */}
+      <MarketplacePanel isOpen={isMarketplaceOpen} onClose={onClose} />
 
-      <TranslationPanel
-        isOpen={isTransPanelOpen}
-        onClose={() => setIsTransPanelOpen(false)}
+      {/* 4. Translation Layers (Management) */}
+      <TranslationPanel isOpen={isTransPanelOpen} onClose={onClose} />
+
+      {/* 5. User Profile */}
+      <ProfilePanel isOpen={isProfileOpen} onClose={onClose} />
+
+      {/* 6. Appearance & Version Settings */}
+      <AppearancePanel
+        isOpen={isAppearanceOpen}
+        onClose={onClose}
         activeVersionId={activeLayerId}
-        onSelectVersion={(id: string | null) =>
-          setActiveLayerId(id ?? "jps-1985")
-        }
+        onSelectVersion={onSelectLayer}
+        onOpenTranslations={onOpenTranslations}
       />
-
-      {editingVerse && (
-        <TranslationEditor
-          isOpen={!!editingVerse}
-          onClose={() => setEditingVerse(null)}
-          bookSlug={bookSlug || activeBook.toLowerCase()}
-          chapterNum={activeChapter}
-          verseNum={editingVerse.c2_index}
-          verseRef={editingVerse.id}
-          sourceText={editingVerse.he}
-          initialTranslation={editingVerse.en}
-          versionId={activeLayerId.length > 20 ? activeLayerId : undefined}
-        />
-      )}
     </>
   );
 }

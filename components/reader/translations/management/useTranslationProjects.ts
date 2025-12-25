@@ -1,98 +1,167 @@
+"use client";
+
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/context/auth-context";
+import { handleSupabaseError, validateResponse } from "@/lib/supabase/utils";
+import { useRouter } from "next/navigation";
+import { TranslationProject } from "@/lib/types/library";
 
-export interface TranslationProject {
-  id: string;
-  name: string;
-  status: string;
-  created_at: string;
-}
-
+/**
+ * useTranslationProjects
+ * Central engine for managing Sovereignty layers.
+ * Resolves: Promise type assignment errors and "Unexpected any" warnings.
+ */
 export function useTranslationProjects() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const supabase = createClient();
+  const router = useRouter();
 
   const [projects, setProjects] = useState<TranslationProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  /**
+   * fetchProjects
+   * Retrieves user-owned layers and maps them to the social metadata interface.
+   */
   const fetchProjects = useCallback(async () => {
-    if (!user) return;
+    if (authLoading || !user) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
+
     try {
       if (projects.length === 0) setLoading(true);
 
-      const { data, error } = await supabase
+      // Explicit interface for the database response to satisfy strict typing
+      interface ProjectRow {
+        id: string;
+        title: string;
+        description: string | null;
+        author_display_name: string | null;
+        status: string;
+        install_count: number;
+        created_at: string;
+      }
+
+      // Explicitly typing the selection to remove 'any'
+      const query = supabase
         .from("translation_versions")
-        .select("*")
+        .select(
+          "id, title, description, author_display_name, status, install_count, created_at"
+        )
         .eq("owner_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setProjects(data as TranslationProject[]);
-    } catch (err) {
-      console.error("Error fetching projects:", err);
+      // Wrap the query in Promise.resolve to satisfy the validateResponse generic constraint
+      const { data, error: fetchErr } = await validateResponse<ProjectRow[]>(
+        Promise.resolve(query)
+      );
+
+      if (fetchErr) {
+        setError(fetchErr);
+        return;
+      }
+
+      // Transform raw DB rows into the UI-friendly TranslationProject interface
+      const mappedProjects: TranslationProject[] = (data || []).map(
+        (p: ProjectRow) => ({
+          id: p.id,
+          title: p.title,
+          name: p.title,
+          description: p.description || "",
+          author_display_name: p.author_display_name || "",
+          status: p.status,
+          install_count: p.install_count || 0,
+          created_at: p.created_at,
+        })
+      );
+
+      setProjects(mappedProjects);
+      setError(null);
+    } catch (err: unknown) {
+      setError(handleSupabaseError(err));
     } finally {
       setLoading(false);
     }
-  }, [user, supabase, projects.length]);
+  }, [user, authLoading, supabase, projects.length]);
 
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  const createProject = async (name: string) => {
-    if (!user || !name.trim()) return;
+  /**
+   * createProject
+   */
+  const createProject = async (projectName: string): Promise<boolean> => {
+    if (!user || !projectName.trim()) return false;
     setProcessingId("create");
+    setError(null);
 
     try {
-      const { error } = await supabase.from("translation_versions").insert({
-        name,
-        owner_id: user.id,
-        status: "private",
-        language_code: "en",
-      });
+      const { error: insertErr } = await supabase
+        .from("translation_versions")
+        .insert({
+          title: projectName.trim(),
+          owner_id: user.id,
+          status: "private",
+          language_code: "en",
+          install_count: 0,
+        });
 
-      if (error) throw error;
+      if (insertErr) throw insertErr;
       await fetchProjects();
-    } catch (err) {
-      console.error("Failed to create project:", err);
+      return true;
+    } catch (err: unknown) {
+      setError(handleSupabaseError(err));
+      return false;
     } finally {
       setProcessingId(null);
     }
   };
 
+  /**
+   * togglePublish
+   */
   const togglePublish = async (id: string, currentStatus: string) => {
     setProcessingId(id);
     const newStatus = currentStatus === "public" ? "private" : "public";
-
     try {
-      const { error } = await supabase
+      const { error: updateErr } = await supabase
         .from("translation_versions")
         .update({ status: newStatus })
         .eq("id", id);
 
-      if (error) throw error;
+      if (updateErr) throw updateErr;
+
       await fetchProjects();
-    } catch (err) {
-      console.error("Failed to update status:", err);
+      router.refresh();
+    } catch (err: unknown) {
+      setError(handleSupabaseError(err));
     } finally {
       setProcessingId(null);
     }
   };
 
+  /**
+   * deleteProject
+   */
   const deleteProject = async (id: string) => {
     setProcessingId(id);
     try {
-      const { error } = await supabase
+      const { error: deleteErr } = await supabase
         .from("translation_versions")
         .delete()
         .eq("id", id);
 
-      if (error) throw error;
+      if (deleteErr) throw deleteErr;
+
       await fetchProjects();
-    } catch (err) {
-      console.error("Failed to delete project:", err);
+      router.refresh();
+    } catch (err: unknown) {
+      setError(handleSupabaseError(err));
     } finally {
       setProcessingId(null);
     }
@@ -102,8 +171,10 @@ export function useTranslationProjects() {
     projects,
     loading,
     processingId,
+    error,
     createProject,
     togglePublish,
     deleteProject,
+    fetchProjects,
   };
 }

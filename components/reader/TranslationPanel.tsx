@@ -1,102 +1,80 @@
 "use client";
 
-import { useState } from "react";
-import { X, Globe, Library } from "lucide-react";
+import React from "react";
+import { X, Globe, Plus, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Ensure named imports are used
-import { ManagementView } from "@/components/reader/translations/ManagementView";
-import { MarketplaceView } from "@/components/reader/translations/MarketplaceView";
+import { StatusFooter } from "@/components/ui/status-footer";
+import { Button } from "@/components/ui/button";
 
 interface TranslationPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  activeVersionId: string | null;
-  onSelectVersion: (id: string | null) => void;
 }
 
-type PanelTab = "MY_VERSIONS" | "MARKETPLACE";
-
 /**
- * TranslationPanel
- * Fixed: Explicitly typed the onSelect callback for MarketplaceView.
+ * components/reader/TranslationPanel.tsx
+ * Fixed: Removed unused 'activeVersionId' and 'onSelectVersion' from props.
  */
-export function TranslationPanel({
-  isOpen,
-  onClose,
-  activeVersionId,
-  onSelectVersion,
-}: TranslationPanelProps) {
-  const [tab, setTab] = useState<PanelTab>("MY_VERSIONS");
-
+export function TranslationPanel({ isOpen, onClose }: TranslationPanelProps) {
   return (
     <aside
       className={cn(
-        "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-50 transition-transform duration-300 ease-spring shadow-2xl",
+        "fixed top-0 right-0 h-full w-full md:w-[400px] lg:w-[450px] bg-paper border-l border-pencil/10 z-[60] transition-transform duration-500 ease-spring shadow-[-12px_0_40px_-10px_rgba(0,0,0,0.05)] flex flex-col",
         isOpen ? "translate-x-0" : "translate-x-full"
       )}
     >
-      {/* iOS-Style Sticky Header */}
-      <div className="h-14 border-b border-pencil/10 flex items-center justify-between px-4 bg-paper/80 backdrop-blur shrink-0">
-        <div className="flex items-center gap-2">
-          <Globe className="w-4 h-4 text-gold" />
-          <h2 className="font-serif font-bold text-ink text-lg">
+      {/* High-Fidelity Header */}
+      <div className="h-20 border-b border-pencil/10 flex items-center justify-between px-8 bg-paper/95 backdrop-blur-md shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center imprint-sm">
+            <Globe className="w-5 h-5 text-accent-foreground" />
+          </div>
+          <h2 className="text-2xl text-ink font-bold tracking-tight">
             Translations
           </h2>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded-full hover:bg-black/5 transition-colors"
+          className="p-3 rounded-full hover:bg-pencil/5 transition-all group active:scale-90"
         >
-          <X className="w-5 h-5 text-pencil" />
+          <X className="w-6 h-6 text-pencil group-hover:rotate-90 transition-transform duration-300" />
         </button>
       </div>
 
-      {/* Segmented Control Tabs */}
-      <div className="flex p-1.5 gap-1 bg-pencil/5 mx-4 mt-4 rounded-xl">
-        <button
-          onClick={() => setTab("MY_VERSIONS")}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
-            tab === "MY_VERSIONS"
-              ? "bg-white text-ink shadow-sm"
-              : "text-pencil/60 hover:text-pencil"
-          )}
-        >
-          <Library className="w-3.5 h-3.5" />
-          My Projects
-        </button>
-        <button
-          onClick={() => setTab("MARKETPLACE")}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
-            tab === "MARKETPLACE"
-              ? "bg-white text-ink shadow-sm"
-              : "text-pencil/60 hover:text-pencil"
-          )}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          Explore
-        </button>
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black text-pencil/40 uppercase tracking-[0.2em]">
+              Your Personal Layers
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[9px] font-black text-accent uppercase tracking-widest hover:bg-accent/5"
+            >
+              <Plus className="w-3 h-3 mr-1" /> New Layer
+            </Button>
+          </div>
+
+          <div className="p-8 border-2 border-dashed border-pencil/10 rounded-3xl flex flex-col items-center justify-center text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center">
+              <Layers className="w-6 h-6 text-pencil/20" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-ink">No Active Layers</p>
+              <p className="text-xs text-pencil/60 max-w-[200px] mx-auto mt-1">
+                Create a personal translation layer to capture your own
+                insights.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Scrollable View Area */}
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        {tab === "MY_VERSIONS" ? (
-          <ManagementView
-            activeVersionId={activeVersionId}
-            onSelect={onSelectVersion}
-          />
-        ) : (
-          <MarketplaceView onSelect={(id: string) => onSelectVersion(id)} />
-        )}
-      </div>
-
-      <div className="p-4 border-t border-pencil/10 bg-pencil/5 mt-auto">
-        <p className="text-[9px] text-pencil uppercase tracking-widest leading-relaxed text-center">
-          Translate the text yourself or contribute to community versions. Tap a
-          verse to open the editor.
-        </p>
-      </div>
+      <StatusFooter>
+        Discover community-driven translation projects in the marketplace.
+      </StatusFooter>
     </aside>
   );
 }

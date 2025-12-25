@@ -1,11 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 import { UserTranslation, AuthorMetadata } from "@/lib/types/library";
 
 /**
  * saveVerseTranslation
- * Persists user-authored translations to the Sovereignty Layer.
  */
 export async function saveVerseTranslation(translation: UserTranslation) {
   const supabase = await createClient();
@@ -31,8 +31,34 @@ export async function saveVerseTranslation(translation: UserTranslation) {
 }
 
 /**
+ * updateProjectMetadata
+ * Allows authors to edit the 160-char description and public author name.
+ */
+export async function updateProjectMetadata(
+  id: string,
+  type: "translation" | "commentary",
+  updates: { name?: string; description?: string; author_name?: string }
+) {
+  const supabase = await createClient();
+  const table =
+    type === "translation" ? "translation_versions" : "commentary_collections";
+
+  const { error } = await supabase
+    .from(table)
+    .update({
+      title: updates.name,
+      description: updates.description,
+      author_display_name: updates.author_name,
+    })
+    .eq("id", id);
+
+  if (error) throw error;
+  revalidatePath("/library");
+  return { success: true };
+}
+
+/**
  * fetchAuthorMetadata
- * Retrieves bio and era information for authors.
  */
 export async function fetchAuthorMetadata(
   name: string

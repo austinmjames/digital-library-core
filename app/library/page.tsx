@@ -5,9 +5,10 @@ export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Scroll, ChevronRight, Info, User } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import { useAuth } from "@/components/context/auth-context";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 
 interface LibraryBook {
   slug: string;
@@ -19,7 +20,8 @@ interface LibraryBook {
 
 /**
  * app/library/page.tsx
- * Updated with a global header to restore Sign-In/Sign-Up access.
+ * Updated: Removed redundant positioning and tracking classes.
+ * Design: Dead-centered "Library" context with responsive top-left logo.
  */
 export default function LibraryIndex() {
   const { user, isLoading: authLoading } = useAuth();
@@ -58,23 +60,31 @@ export default function LibraryIndex() {
 
   return (
     <div className="min-h-screen bg-paper">
-      {/* Universal Library Header */}
+      {/* Universal Header - Cleaned up redundant 'relative' and tracking */}
       <nav className="sticky top-0 z-50 w-full bg-paper/80 backdrop-blur-xl border-b border-pencil/10 px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 group">
-          <Scroll className="w-5 h-5 text-gold group-hover:rotate-12 transition-transform" />
-          <span className="font-serif font-bold text-xl text-ink">
-            OpenTorah
-          </span>
-        </Link>
+        {/* LEFT: Branding */}
+        <div className="flex items-center z-10">
+          <Link href="/" className="group">
+            <Logo type="responsive" size="sm" />
+          </Link>
+        </div>
 
-        <div className="flex items-center gap-3">
+        {/* CENTER: Context - Perfectly Centered */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="font-serif font-bold text-lg text-ink tracking-[0.1em] pointer-events-auto">
+            Library
+          </span>
+        </div>
+
+        {/* RIGHT: User Controls */}
+        <div className="flex items-center gap-3 z-10">
           {!authLoading && !user ? (
             <>
               <Link href="/login">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-xs font-bold uppercase tracking-wider"
+                  className="text-xs font-bold uppercase tracking-widest"
                 >
                   Sign In
                 </Button>
@@ -82,7 +92,7 @@ export default function LibraryIndex() {
               <Link href="/sign-up">
                 <Button
                   size="sm"
-                  className="bg-ink text-paper rounded-full px-4 text-xs font-bold uppercase tracking-wider"
+                  className="bg-ink text-paper rounded-full px-4 text-xs font-bold uppercase tracking-widest"
                 >
                   Join
                 </Button>
@@ -93,9 +103,13 @@ export default function LibraryIndex() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-10 h-10 rounded-full border border-pencil/10 bg-white shadow-sm"
+                className="w-10 h-10 rounded-full border border-pencil/10 bg-white shadow-sm flex items-center justify-center"
               >
-                <User className="w-5 h-5 text-pencil" />
+                <Logo
+                  type="icon"
+                  size="sm"
+                  className="border-none shadow-none bg-transparent"
+                />
               </Button>
             </Link>
           ) : null}
@@ -105,7 +119,7 @@ export default function LibraryIndex() {
       <div className="p-6 md:p-12 max-w-7xl mx-auto">
         <header className="mb-12 md:mb-16 pb-8 flex items-baseline justify-between border-b border-pencil/10">
           <h1 className="text-3xl md:text-4xl font-serif font-bold text-ink">
-            Library Catalog
+            Browse Catalog
           </h1>
           <p className="text-xs text-pencil font-mono uppercase tracking-widest">
             {books.length} Books Available
@@ -114,7 +128,7 @@ export default function LibraryIndex() {
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-            <Scroll className="w-12 h-12 text-pencil/10 mb-4" />
+            <Logo type="icon" size="lg" className="opacity-10" />
           </div>
         ) : books.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
@@ -146,10 +160,10 @@ export default function LibraryIndex() {
                     <Link
                       key={book.slug}
                       href={`/library/${category.toLowerCase()}/${book.slug}/1`}
-                      className="group relative h-32 md:h-40 p-6 bg-white border border-pencil/10 rounded-2xl hover:border-gold/50 hover:shadow-lg transition-all duration-300 flex flex-col justify-between"
+                      className="group relative h-32 md:h-40 p-6 bg-white border border-pencil/10 rounded-2xl hover:border-accent/50 hover:shadow-lg transition-all duration-300 flex flex-col justify-between"
                     >
-                      <div>
-                        <h3 className="font-serif text-lg md:text-xl text-ink font-medium group-hover:text-gold transition-colors">
+                      <div className="text-left">
+                        <h3 className="font-serif text-lg md:text-xl text-ink font-medium group-hover:text-accent transition-colors">
                           {book.title_en}
                         </h3>
                         <p
@@ -160,8 +174,8 @@ export default function LibraryIndex() {
                         </p>
                       </div>
                       <div className="flex justify-between items-end">
-                        <div className="w-8 h-1 bg-pencil/10 group-hover:bg-gold rounded-full transition-colors" />
-                        <ChevronRight className="w-4 h-4 text-pencil/20 group-hover:text-gold group-hover:translate-x-1 transition-all" />
+                        <div className="w-8 h-1 bg-pencil/10 group-hover:bg-accent rounded-full transition-colors" />
+                        <ChevronRight className="w-4 h-4 text-pencil/20 group-hover:text-accent group-hover:translate-x-1 transition-all" />
                       </div>
                     </Link>
                   ))}

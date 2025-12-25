@@ -23,7 +23,7 @@ import {
 
 interface TranslationSelectorProps {
   onOpenAdvanced: () => void;
-  activeVersionId: string; // Changed to required string to match activeLayer state
+  activeVersionId: string;
   onSelectVersion: (id: string) => void;
 }
 
@@ -36,8 +36,7 @@ interface TranslationVersion {
 
 /**
  * TranslationSelector
- * Dynamically fetches and displays primary versions and user-created Sovereignty projects.
- * This component acts as the switcher for the "In-line Translation Layer."
+ * Updated to use 'title' column for Sovereignty projects.
  */
 export function TranslationSelector({
   onOpenAdvanced,
@@ -53,18 +52,15 @@ export function TranslationSelector({
   );
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Fetch Available Layers (Public & Private)
   React.useEffect(() => {
     const fetchLayers = async () => {
       setIsLoading(true);
       try {
-        // 1. Fetch Primary Versions (JPS, etc.)
         const { data: primaryData } = await supabase
           .from("text_versions")
           .select("version_title, language_code")
           .eq("is_primary", true);
 
-        // Map to unique version titles
         const primaryMapped = Array.from(
           new Set(primaryData?.map((d) => d.version_title))
         ).map((title) => ({
@@ -77,24 +73,19 @@ export function TranslationSelector({
           language_code: "en",
         }));
 
-        // Ensure JPS 1985 is always at the top
-        const sortedPrimary = primaryMapped.sort((a) =>
-          a.id === "jps-1985" ? -1 : 1
-        );
-        setVersions(sortedPrimary);
+        setVersions(primaryMapped.sort((a) => (a.id === "jps-1985" ? -1 : 1)));
 
-        // 2. Fetch User Sovereignty Projects
         if (user) {
           const { data: projectData } = await supabase
             .from("translation_versions")
-            .select("id, name")
+            .select("id, title") // Updated to 'title'
             .eq("owner_id", user.id);
 
           if (projectData) {
             setUserProjects(
               projectData.map((p) => ({
                 id: p.id,
-                title: p.name,
+                title: p.title,
                 is_primary: false,
                 language_code: "en",
               }))
@@ -111,15 +102,14 @@ export function TranslationSelector({
     fetchLayers();
   }, [user, supabase]);
 
-  // Derived current label for the trigger button
   const currentLabel = React.useMemo(() => {
     const all = [...versions, ...userProjects];
     const match = all.find((v) => v.id === activeVersionId);
-    if (match) return match.title;
-
-    // Fallback logic for map keys
-    if (activeVersionId === "jps-1985") return "JPS 1985";
-    return activeVersionId;
+    return match
+      ? match.title
+      : activeVersionId === "jps-1985"
+      ? "JPS 1985"
+      : activeVersionId;
   }, [activeVersionId, versions, userProjects]);
 
   return (
@@ -195,7 +185,6 @@ export function TranslationSelector({
                 )}
 
                 <DropdownMenuSeparator className="bg-pencil/10 my-1.5" />
-
                 <DropdownMenuItem
                   onClick={onOpenAdvanced}
                   className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-pencil hover:text-ink cursor-pointer transition-colors"

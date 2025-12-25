@@ -1,25 +1,18 @@
 import type { Metadata } from "next";
-import { Frank_Ruhl_Libre, Libre_Franklin } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TextSettingsProvider } from "@/components/context/text-settings-context";
 import { AuthProvider } from "@/components/context/auth-context";
 import "./globals.css";
 
-const frankRuhl = Frank_Ruhl_Libre({
-  subsets: ["hebrew", "latin"],
-  variable: "--font-frank-ruhl",
-  display: "swap",
-});
-
-const libreFranklin = Libre_Franklin({
-  subsets: ["latin"],
-  variable: "--font-libre-franklin",
-  display: "swap",
-});
+/**
+ * app/layout.tsx
+ * Updated: Branding set to DrashX.
+ * Typography: Enforced 'font-sans' (Segoe UI) at the document level to prevent serif fallbacks.
+ */
 
 export const metadata: Metadata = {
-  title: "TorahPro",
-  description: "A collaborative digital sanctuary for Jewish texts.",
+  title: "DrashX",
+  description: "A collaborative digital sanctuary for deep text exploration.",
 };
 
 export default function RootLayout({
@@ -28,10 +21,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${frankRuhl.variable} ${libreFranklin.variable} font-english antialiased bg-paper transition-colors duration-300`}
-      >
+    <html lang="en" suppressHydrationWarning className="font-sans">
+      <body className="antialiased bg-paper transition-colors duration-300 min-h-screen">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
