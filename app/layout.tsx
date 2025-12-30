@@ -1,38 +1,51 @@
+import { SideNav } from "@/components/layout/SideNav";
 import type { Metadata } from "next";
-import { ThemeProvider } from "next-themes";
-import { TextSettingsProvider } from "@/components/context/text-settings-context";
-import { AuthProvider } from "@/components/context/auth-context";
+import { Inter, Noto_Serif_Hebrew } from "next/font/google";
 import "./globals.css";
 
 /**
- * app/layout.tsx
- * Updated: Branding set to DrashX.
- * Typography: Enforced 'font-sans' (Segoe UI) at the document level to prevent serif fallbacks.
+ * Root Layout
+ * Filepath: app/layout.tsx
+ * Role: Global shell for DrashX Scriptorium.
+ * Context: PRD Section 4 (Typography & Layout).
  */
 
+// Configure Noto Serif Hebrew for primary textual content
+const notoSerifHebrew = Noto_Serif_Hebrew({
+  subsets: ["hebrew"],
+  variable: "--font-hebrew",
+  weight: ["300", "400", "700"],
+});
+
+// Configure Inter (proxy for Segoe UI style) for interface
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
+
 export const metadata: Metadata = {
-  title: "DrashX",
-  description: "A collaborative digital sanctuary for deep text exploration.",
+  title: "DrashX | The Digital Beit Midrash",
+  description:
+    "High-performance interface for Jewish text study, community insights, and translation projects.",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" suppressHydrationWarning className="font-sans">
-      <body className="antialiased bg-paper transition-colors duration-300 min-h-screen">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            <TextSettingsProvider>{children}</TextSettingsProvider>
-          </AuthProvider>
-        </ThemeProvider>
+    <html lang="en" className={`${notoSerifHebrew.variable} ${inter.variable}`}>
+      <body className="font-sans antialiased bg-paper text-ink">
+        <div className="flex h-screen overflow-hidden">
+          {/* Main Navigation Sidebar */}
+          <SideNav />
+
+          {/* Application Content Area */}
+          <main className="flex-1 relative overflow-y-auto bg-paper selection:bg-orange-100 selection:text-orange-900">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );

@@ -1,15 +1,17 @@
 "use client";
 
+import { AlertTriangle, Home, RefreshCcw } from "lucide-react";
+import Link from "next/link";
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCcw } from "lucide-react";
 
 /**
- * app/error.tsx
- * Standard Next.js Client Component for handling runtime errors.
- * This MUST be a client component to handle recovery logic.
+ * Global Error Boundary
+ * Filepath: app/error.tsx
+ * Role: Catches runtime exceptions and provides a "Broken Tablet" recovery UI.
+ * Context: Aligned with PRD Section 3.1 (Reliability & Resilience).
  */
-export default function Error({
+
+export default function GlobalError({
   error,
   reset,
 }: {
@@ -17,48 +19,54 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to your error reporting service
-    console.error("Critical Application Error:", error);
+    // Log the error to an error reporting service if needed
+    console.error("[DrashX Engine] Runtime Exception:", error);
   }, [error]);
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center p-6 text-center bg-paper animate-in fade-in duration-500">
-      <div className="max-w-md space-y-6">
-        <div className="mx-auto w-16 h-16 bg-destructive/5 rounded-full flex items-center justify-center text-destructive/60 mb-2 border border-destructive/10">
-          <AlertCircle className="w-8 h-8" />
+    <div className="min-h-screen flex items-center justify-center bg-paper p-6">
+      <div className="max-w-md w-full text-center space-y-8 animate-in fade-in zoom-in duration-500">
+        {/* Visual "Broken Tablet" Iconography */}
+        <div className="relative inline-block">
+          <div className="p-6 bg-amber-50 rounded-full border border-amber-100">
+            <AlertTriangle className="w-12 h-12 text-amber-600" />
+          </div>
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
         </div>
 
-        <div className="space-y-2">
-          <h2 className="text-2xl font-serif font-bold text-ink tracking-tight">
-            Study Session Interrupted
-          </h2>
-          <p className="text-pencil font-english leading-relaxed">
-            We encountered a technical issue while rendering this text. The
-            error has been logged and we are looking into it.
+        <div className="space-y-3">
+          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
+            The Scriptorium is Stalled
+          </h1>
+          <p className="text-zinc-500 leading-relaxed italic">
+            &ldquo;One does not acquire Torah without a few stumbles.&rdquo;
+            <br />
+            An unexpected error occurred while processing your request.
           </p>
-          {error.digest && (
-            <p className="text-[10px] font-mono text-pencil/30 mt-4 uppercase tracking-widest">
-              Error Hash: {error.digest}
-            </p>
-          )}
         </div>
 
-        <div className="pt-6 flex flex-col gap-3 items-center">
-          <Button
+        <div className="flex flex-col gap-3">
+          <button
             onClick={() => reset()}
-            className="rounded-full bg-ink text-paper hover:bg-charcoal px-8 gap-2 shadow-lg active:scale-95 transition-all"
+            className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-900 text-white text-[11px] font-bold uppercase tracking-widest rounded-2xl hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200"
           >
-            <RefreshCcw className="w-4 h-4" />
-            Reload Chapter
-          </Button>
+            <RefreshCcw size={16} />
+            Try to Reconnect
+          </button>
 
-          <Button
-            variant="ghost"
-            onClick={() => (window.location.href = "/library")}
-            className="text-pencil hover:text-ink text-sm font-medium"
+          <Link
+            href="/"
+            className="flex items-center justify-center gap-2 w-full py-4 bg-white border border-zinc-200 text-zinc-600 text-[11px] font-bold uppercase tracking-widest rounded-2xl hover:bg-zinc-50 transition-all"
           >
+            <Home size={16} />
             Return to Library
-          </Button>
+          </Link>
+        </div>
+
+        <div className="pt-8 border-t border-zinc-100">
+          <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-[0.2em]">
+            Error Hash: {error.digest || "Internal Runtime Error"}
+          </p>
         </div>
       </div>
     </div>
