@@ -8,9 +8,13 @@
  */
 
 import axios from "axios";
+import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+// Load environment variables from .env
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,12 +33,13 @@ const STRUCTURED_OUTPUT_PATH = path.join(
   "../src/lib/etl/sefaria_structured_index.json"
 );
 
-// Using provided Personal Access Token for high-rate limit traversal
+// Use GITHUB_PAT from .env for security and high-rate limit traversal
+const GITHUB_PAT = process.env.GITHUB_PAT;
+
 const HEADERS = {
   Accept: "application/vnd.github.v3+json",
   "User-Agent": "DrashX-Architect",
-  Authorization:
-    "token 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",
+  ...(GITHUB_PAT ? { Authorization: `token ${GITHUB_PAT}` } : {}),
 };
 
 const wait = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -180,6 +185,11 @@ async function crawl(currentPath) {
 
 async function run() {
   console.log("Starting Incremental Sefaria Discovery...");
+  if (!GITHUB_PAT) {
+    console.warn(
+      "[SECURITY]: No GITHUB_PAT found in .env. Crawling will be slow and may hit rate limits."
+    );
+  }
   loadState();
   console.log("--------------------------------------------------");
 
