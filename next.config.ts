@@ -1,7 +1,21 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // We removed the experimental cacheComponents line to fix the build
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com", // Google Auth
+      },
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com", // GitHub Auth
+      },
+      {
+        protocol: "https",
+        hostname: "secure.gravatar.com", // Gravatar
+      },
+    ],
+  },
 };
 
 export default nextConfig;

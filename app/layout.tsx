@@ -1,13 +1,14 @@
 import { SideNav } from "@/components/layout/SideNav";
+import { getCurrentUser } from "@/lib/data/user";
 import type { Metadata } from "next";
 import { Inter, Noto_Serif_Hebrew } from "next/font/google";
 import "./globals.css";
 
 /**
  * Root Layout
- * Filepath: app/layout.tsx
+ * Filepath: src/app/layout.tsx
  * Role: Global shell for DrashX Scriptorium.
- * Context: PRD Section 4 (Typography & Layout).
+ * Update: Now fetches server-side user data to power Admin/Pro features in SideNav.
  */
 
 // Configure Noto Serif Hebrew for primary textual content
@@ -29,17 +30,21 @@ export const metadata: Metadata = {
     "High-performance interface for Jewish text study, community insights, and translation projects.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Fetch user session/profile server-side to prevent layout shift
+  // This allows the SideNav to immediately show Admin/Pro features if authorized
+  const user = await getCurrentUser();
+
   return (
     <html lang="en" className={`${notoSerifHebrew.variable} ${inter.variable}`}>
       <body className="font-sans antialiased bg-paper text-ink">
         <div className="flex h-screen overflow-hidden">
-          {/* Main Navigation Sidebar */}
-          <SideNav />
+          {/* Main Navigation Sidebar with User Context */}
+          <SideNav user={user || undefined} />
 
           {/* Application Content Area */}
           <main className="flex-1 relative overflow-y-auto bg-paper selection:bg-orange-100 selection:text-orange-900">

@@ -14,13 +14,15 @@ import {
   Share2,
   Users,
 } from "lucide-react";
+import Image from "next/image"; // Import Next.js Image component
 import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
 /**
- * DrashX Side Navigation (Robust v2.1)
+ * DrashX Side Navigation (Robust v2.2)
  * Role: Primary Nav with integrated Zmanim Engine and Admin Mission Control.
  * Theme: Inverse (zinc-950)
+ * Update: Replaced <img> with <Image /> for LCP optimization.
  */
 
 interface SideNavProps {
@@ -279,15 +281,18 @@ export const SideNav: React.FC<SideNavProps> = ({
           <Settings size={22} />
         </button>
 
+        {/* Updated Avatar Container with Relative Positioning for next/image */}
         <div
-          className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 overflow-hidden hover:border-zinc-500 transition-all cursor-pointer"
+          className="relative w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 overflow-hidden hover:border-zinc-500 transition-all cursor-pointer"
           onClick={() => handleNav("profile")}
         >
           {user?.avatar_url ? (
-            <img
+            <Image
               src={user.avatar_url}
               alt="Profile"
-              className="w-full h-full object-cover"
+              fill
+              sizes="40px"
+              className="object-cover"
             />
           ) : (
             <Users size={20} />

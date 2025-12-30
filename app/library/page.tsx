@@ -1,5 +1,3 @@
-// Filepath: app/library/page.tsx
-
 "use client";
 
 import { cn } from "@/lib/utils/utils";
@@ -20,6 +18,13 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
+
+/**
+ * DrashX Library Browser (Full Implementation)
+ * Filepath: src/app/library/page.tsx
+ * Role: The central nervous system for content discovery.
+ * Includes: Catalog (Canon), Community Market (UGC), and Study Plans (Curriculum).
+ */
 
 // --- Types ---
 
