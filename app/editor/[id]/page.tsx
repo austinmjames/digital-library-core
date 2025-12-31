@@ -27,9 +27,10 @@ interface ExtendedUserNote extends UserNote {
 }
 
 /**
- * Studio Page Orchestrator
+ * Studio Page Orchestrator (v1.1 - Type Safe)
+ * Filepath: app/editor/[id]/page.tsx
  * Role: Main entry point for editing Notebooks and Translations.
- * Design: Minimalist Paper theme with high-density workspace controls.
+ * Fix: Resolved type error where Record<string, unknown> was assigned to string state.
  */
 export default function StudioPage() {
   const params = useParams();
@@ -54,7 +55,15 @@ export default function StudioPage() {
     if (note) {
       const extendedNote = note as ExtendedUserNote;
       setTitle(extendedNote.title || "Untitled Insight");
-      setContent(extendedNote.content || "");
+
+      // Fix: Safely handle content which could be a TipTap Record or a String
+      const rawContent = extendedNote.content;
+      setContent(
+        typeof rawContent === "string"
+          ? rawContent
+          : JSON.stringify(rawContent || {})
+      );
+
       setIsPublic(extendedNote.is_public || false);
     }
   }, [note]);
@@ -63,7 +72,7 @@ export default function StudioPage() {
   const debouncedSave = useMemo(
     () =>
       debounce((newContent: string) => {
-        saveNote.mutate(newContent);
+        saveNote.mutate({ content: newContent });
       }, 2000),
     [saveNote]
   );
