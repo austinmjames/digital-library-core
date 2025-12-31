@@ -1,23 +1,23 @@
-import { Verse } from "@/components/reader/ReaderEngine";
 import { createClient } from "@/lib/supabase/client";
 import { DrashRef, StructureType } from "@/lib/utils/drash-ref";
+import { Verse } from "@/types/reader";
 import {
   InfiniteData,
-  QueryFunctionContext,
   useInfiniteQuery,
   UseInfiniteQueryResult,
 } from "@tanstack/react-query";
 
 /**
- * useInfiniteText Hook (v3.5 - Strict Type Resolution)
+ * useInfiniteText (v2.1 - Type Synchronized)
  * Filepath: lib/hooks/useInfiniteText.ts
- * Role: Manages paginated fetching with correct InfiniteData signatures and Inter-Book transitions.
- * Alignment: PRD Section 2.1 (The Reader Engine - Performance).
+ * Role: Virtualized ingestion engine for scholarly manuscripts.
+ * PRD Alignment: Section 3.2 (Infinite Scroll Reader).
+ * Fix: Resolved TypeScript assignment error by injecting required 'book_id' and 'path' properties.
  */
 
 export interface PageParam {
   bookSlug: string;
-  sectionRef: string; // e.g., 'Genesis.1'
+  sectionRef: string;
 }
 
 export interface InfinitePage {
@@ -32,17 +32,17 @@ export interface InfinitePage {
 }
 
 /**
- * Explicit interface for the get_reader_context RPC return type.
+ * Interface mapping for library.get_reader_segment return table
  */
-interface ReaderContextRow {
-  verse_id: string;
-  verse_ref: string;
+interface ReaderSegmentRow {
+  id: string;
+  ref: string;
   hebrew_text: string;
   english_text: string;
   c1: number;
   c2: number;
-  book_title_en: string;
-  category_path: string;
+  book_en_title: string;
+  book_structure_type: string;
 }
 
 interface UseInfiniteTextProps {
@@ -50,10 +50,6 @@ interface UseInfiniteTextProps {
   initialRef: string;
 }
 
-/**
- * Hook to manage infinite scrolling of text.
- * The return type explicitly includes PageParam in InfiniteData to resolve type mismatches.
- */
 export function useInfiniteText({
   initialBookSlug,
   initialRef,
@@ -63,7 +59,7 @@ export function useInfiniteText({
 > {
   const supabase = createClient();
 
-  // Normalize initialRef to Section level using DrashRef utility
+  // Parse the initial reference to establish the starting segment (e.g., Genesis.1)
   const { book: parsedBook, section } = DrashRef.parse(initialRef);
   const startSection = `${parsedBook}.${section || "1"}`;
 
@@ -79,43 +75,41 @@ export function useInfiniteText({
       bookSlug: initialBookSlug,
       sectionRef: startSection,
     } as PageParam,
-    queryFn: async ({
-      pageParam,
-    }: QueryFunctionContext<
-      [string, string, string],
-      PageParam
-    >): Promise<InfinitePage> => {
+    queryFn: async ({ pageParam }): Promise<InfinitePage> => {
       const { bookSlug, sectionRef } = pageParam;
 
-      // 1. Resolve Book Meta (with next/prev book pointers for transitions)
+      // 1. Resolve Book Metadata (Schema: library)
       const { data: book, error: bookError } = await supabase
+        .schema("library")
         .from("books")
         .select("id, structure_type, next_book_slug, prev_book_slug")
         .eq("slug", bookSlug)
         .single();
 
-      if (bookError || !book) throw new Error(`Meta error for ${bookSlug}`);
+      if (bookError || !book)
+        throw new Error(`Manuscript ${bookSlug} not found in the library.`);
 
-      // 2. Fetch the verses for the current section using the high-performance RPC
-      const { data: versesData, error: versesError } = await supabase.rpc(
-        "get_reader_context",
-        {
+      // 2. Fetch Verses via Segment RPC (Aligned with supabase/migrations/20240523_reader_logic.sql)
+      const { data: versesData, error: versesError } = await supabase
+        .schema("library")
+        .rpc("get_reader_segment", {
           p_ref_prefix: sectionRef,
-        }
-      );
+        });
 
       if (versesError) throw versesError;
 
-      // 3. Discover neighboring refs for intra-book pagination
+      // 3. Coordinate Temporal Navigation
       const firstVerse = versesData?.[0];
       let nextRef: string | null = null;
       let prevRef: string | null = null;
 
       if (firstVerse) {
-        const { data: navData } = await supabase.rpc("get_next_prev_refs", {
-          p_book_id: book.id,
-          p_current_c1: firstVerse.c1,
-        });
+        const { data: navData } = await supabase
+          .schema("library")
+          .rpc("get_next_prev_refs", {
+            p_book_id: book.id,
+            p_current_c1: firstVerse.c1,
+          });
 
         if (navData?.[0]) {
           nextRef = navData[0].next_ref || null;
@@ -124,18 +118,18 @@ export function useInfiniteText({
       }
 
       return {
-        verses: ((versesData as ReaderContextRow[]) || []).map(
-          (v: ReaderContextRow) => ({
-            id: v.verse_id,
-            ref: v.verse_ref,
-            hebrew_text: v.hebrew_text,
-            english_text: v.english_text,
-            c1: v.c1,
-            c2: v.c2,
-            global_index: 0,
-            has_notes: false,
-          })
-        ),
+        verses: ((versesData as ReaderSegmentRow[]) || []).map((v) => ({
+          id: v.id,
+          ref: v.ref,
+          he: v.hebrew_text,
+          en: v.english_text,
+          c1: v.c1,
+          c2: v.c2,
+          // Fix: Explicitly providing required database-level properties for the Verse interface
+          // book_id is passed from the metadata fetch; path is derived from the reference
+          book_id: book.id,
+          path: v.ref.replace(/\./g, "_"),
+        })),
         bookSlug,
         currentSectionRef: sectionRef,
         structureType: book.structure_type as StructureType,
@@ -145,47 +139,39 @@ export function useInfiniteText({
         prevRef,
       };
     },
-    getNextPageParam: (lastPage: InfinitePage): PageParam | undefined => {
-      // Priority 1: Next section in the same book
+    getNextPageParam: (lastPage) => {
       if (lastPage.nextRef) {
-        const nextParts = DrashRef.parse(lastPage.nextRef);
+        const p = DrashRef.parse(lastPage.nextRef);
         return {
           bookSlug: lastPage.bookSlug,
-          sectionRef: `${nextParts.book}.${nextParts.section}`,
+          sectionRef: `${p.book}.${p.section}`,
         };
       }
-
-      // Priority 2: Transition to next book in canon
       if (lastPage.nextBook) {
         return {
           bookSlug: lastPage.nextBook,
           sectionRef: `${lastPage.nextBook}.1`,
         };
       }
-
       return undefined;
     },
-    getPreviousPageParam: (firstPage: InfinitePage): PageParam | undefined => {
-      // Priority 1: Previous section in the same book
+    getPreviousPageParam: (firstPage) => {
       if (firstPage.prevRef) {
-        const prevParts = DrashRef.parse(firstPage.prevRef);
+        const p = DrashRef.parse(firstPage.prevRef);
         return {
           bookSlug: firstPage.bookSlug,
-          sectionRef: `${prevParts.book}.${prevParts.section}`,
+          sectionRef: `${p.book}.${p.section}`,
         };
       }
-
-      // Priority 2: Transition to previous book
       if (firstPage.prevBook) {
         return {
           bookSlug: firstPage.prevBook,
           sectionRef: `${firstPage.prevBook}.1`,
         };
       }
-
       return undefined;
     },
-    staleTime: 1000 * 60 * 30, // 30 minutes cache
-    maxPages: 5,
+    // Canonical text is static; we cache it indefinitely to reduce database pressure
+    staleTime: Infinity,
   });
 }

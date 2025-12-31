@@ -1,12 +1,15 @@
-import { DrashButton } from "@/components/ui/DrashButton"; // Updated import
-import { Check } from "lucide-react";
-import React from "react";
+"use client";
+
+import { DrashButton } from "@/components/ui/DrashButton";
+import { cn } from "@/lib/utils/utils";
+import { Check, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import React, { useState } from "react";
 
 /**
- * PricingTable Component
+ * PricingTable Component (v2.0)
  * Filepath: components/shared/PricingTable.tsx
- * Role: Phase 6 - Monetization UI.
- * Purpose: Displays tiered subscription options for the DrashX Pro upgrade.
+ * Role: Monetization UI for 'Talmid' (Free) and 'Chaver' (Pro) tiers.
+ * PRD Alignment: Section 5.0 (Monetization) & Section 4.1 (Aesthetics).
  */
 
 interface PricingCardProps {
@@ -15,7 +18,7 @@ interface PricingCardProps {
   description: string;
   features: string[];
   isPro?: boolean;
-  onUpgrade?: () => void;
+  onUpgrade?: () => Promise<void>;
 }
 
 const PricingCard: React.FC<PricingCardProps> = ({
@@ -25,103 +28,162 @@ const PricingCard: React.FC<PricingCardProps> = ({
   features,
   isPro = false,
   onUpgrade,
-}) => (
-  <div
-    className={`p-8 rounded-[2.5rem] border-2 flex flex-col transition-all duration-500 ${
-      isPro
-        ? "bg-zinc-950 text-white border-zinc-800 shadow-2xl scale-105 z-10"
-        : "bg-white text-zinc-900 border-zinc-100 hover:border-zinc-200"
-    }`}
-  >
-    <div className="mb-8">
-      <div className="flex items-center gap-2 mb-2">
-        <h3 className="text-sm font-bold uppercase tracking-[0.2em]">{tier}</h3>
-        {isPro && (
-          <span className="px-2 py-0.5 bg-amber-500 text-black text-[9px] font-bold rounded-full uppercase">
-            Recommended
-          </span>
-        )}
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-4xl font-bold">{price}</span>
-        <span
-          className={isPro ? "text-zinc-500 text-sm" : "text-zinc-400 text-sm"}
-        >
-          /mo
-        </span>
-      </div>
-      <p
-        className={`mt-4 text-xs leading-relaxed ${
-          isPro ? "text-zinc-400" : "text-zinc-500"
-        }`}
-      >
-        {description}
-      </p>
-    </div>
+}) => {
+  const [loading, setLoading] = useState(false);
 
-    <ul className="space-y-4 mb-10 flex-grow">
-      {features.map((feature, i) => (
-        <li key={i} className="flex items-start gap-3">
-          <div
-            className={`mt-0.5 p-0.5 rounded-full ${
-              isPro
-                ? "bg-amber-500/20 text-amber-500"
-                : "bg-zinc-100 text-zinc-400"
-            }`}
-          >
-            <Check size={12} strokeWidth={3} />
-          </div>
-          <span
-            className={`text-[11px] font-medium leading-tight ${
-              isPro ? "text-zinc-300" : "text-zinc-600"
-            }`}
-          >
-            {feature}
-          </span>
-        </li>
-      ))}
-    </ul>
+  const handleAction = async () => {
+    if (!onUpgrade) return;
+    setLoading(true);
+    await onUpgrade();
+    setLoading(false);
+  };
 
-    <DrashButton
-      variant={isPro ? "primary" : "secondary"}
-      className={`w-full py-4 ${
-        isPro ? "bg-white text-black hover:bg-zinc-200" : ""
-      }`}
-      onClick={onUpgrade}
+  return (
+    <div
+      className={cn(
+        "p-10 rounded-[3rem] border-2 flex flex-col transition-all duration-500 relative overflow-hidden group",
+        isPro
+          ? "bg-zinc-950 text-white border-zinc-800 shadow-2xl scale-[1.05] z-10"
+          : "bg-white text-zinc-900 border-zinc-100 hover:border-zinc-200"
+      )}
     >
-      {isPro ? "Unlock Pro Access" : "Start for Free"}
-    </DrashButton>
-  </div>
-);
+      {/* Decorative Gradient for Pro Tier */}
+      {isPro && (
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-[60px] -mr-16 -mt-16 pointer-events-none" />
+      )}
+
+      <div className="mb-10 relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <h3
+            className={cn(
+              "text-[10px] font-black uppercase tracking-[0.4em]",
+              isPro ? "text-amber-500" : "text-zinc-400"
+            )}
+          >
+            {tier}
+          </h3>
+          {isPro && (
+            <span className="px-2.5 py-1 bg-amber-500 text-zinc-950 text-[8px] font-black rounded-full uppercase tracking-widest shadow-lg">
+              Scholar Choice
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-baseline gap-1">
+          <span className="text-5xl font-black tracking-tighter">{price}</span>
+          <span
+            className={cn(
+              "text-xs font-black uppercase tracking-widest",
+              isPro ? "text-zinc-500" : "text-zinc-300"
+            )}
+          >
+            /mo
+          </span>
+        </div>
+
+        <p
+          className={cn(
+            "mt-6 text-xs leading-relaxed font-medium italic",
+            isPro ? "text-zinc-400" : "text-zinc-500"
+          )}
+        >
+          {description}
+        </p>
+      </div>
+
+      <ul className="space-y-5 mb-12 flex-grow relative z-10">
+        {features.map((feature, i) => (
+          <li key={i} className="flex items-start gap-4">
+            <div
+              className={cn(
+                "mt-0.5 p-1 rounded-lg transition-colors",
+                isPro
+                  ? "bg-zinc-900 text-amber-500"
+                  : "bg-zinc-50 text-zinc-300"
+              )}
+            >
+              <Check size={12} strokeWidth={4} />
+            </div>
+            <span
+              className={cn(
+                "text-[11px] font-bold leading-snug tracking-tight",
+                isPro ? "text-zinc-300" : "text-zinc-600"
+              )}
+            >
+              {feature}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <DrashButton
+        variant={isPro ? "primary" : "secondary"}
+        className={cn(
+          "w-full py-5 rounded-2xl relative overflow-hidden group/btn shadow-xl",
+          isPro
+            ? "bg-white text-zinc-950 hover:bg-zinc-100"
+            : "bg-zinc-950 text-white hover:bg-zinc-800"
+        )}
+        onClick={handleAction}
+        disabled={loading}
+      >
+        <div className="flex items-center justify-center gap-3">
+          {loading ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <>
+              <span className="text-[10px] font-black uppercase tracking-[0.25em]">
+                {isPro ? "Initiate Pro Pass" : "Start Study"}
+              </span>
+              {isPro ? (
+                <Sparkles size={14} className="text-amber-500" />
+              ) : (
+                <ShieldCheck size={14} className="text-zinc-400" />
+              )}
+            </>
+          )}
+        </div>
+      </DrashButton>
+    </div>
+  );
+};
 
 export const PricingTable = () => {
+  const handleCheckout = async (tier: string) => {
+    console.log(`[Stripe] Initializing checkout for ${tier}...`);
+    // Placeholder for actual checkout redirection logic
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto py-12">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto py-20 px-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <PricingCard
-        tier="Seeker"
+        tier="Talmid"
         price="$0"
-        description="Perfect for casual study and individual exploration of the canon."
+        description="Ideal for casual discovery and building your primary scholarly foundations."
         features={[
           "Full access to canonical library",
-          "Unlimited personal notes",
-          "Basic cross-referencing",
-          "Public group participation",
+          "Unlimited personal annotations",
+          "Standard cross-referencing",
+          "Public Circle participation",
+          "Encrypted cloud sync",
         ]}
+        onUpgrade={() => handleCheckout("talmid")}
       />
+
       <PricingCard
-        tier="Sage"
+        tier="Chaver"
         price="$12"
-        description="For serious scholars who want advanced AI synthesis and global impact."
+        description="For devoted scholars requiring deep semantic synthesis and AI logic extraction."
         isPro={true}
         features={[
-          "Advanced AI Contextual Assistant",
-          "Unlimited Vector Semantic Search",
-          "Unlimited Private Study Groups",
-          "Custom Manuscript Exports",
-          "Early access to Phase 7 features",
-          "Pro Scholar badge & avatar",
+          "Sage AI: Contextual Insights",
+          "Vector-powered Semantic Search",
+          "Private Learning Circles",
+          "Custom Manuscript Export (PDF/MD)",
+          "Scholarly Badge & Avatar",
+          "Phase 7 Early Ingestion Access",
         ]}
-        onUpgrade={() => console.log("Stripe Redirect...")}
+        onUpgrade={() => handleCheckout("chaver")}
       />
     </div>
   );

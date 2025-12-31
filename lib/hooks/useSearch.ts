@@ -1,50 +1,104 @@
-import { supabase } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 /**
- * useSearch Hook
- * * Role: Discovery Engine - Search Controller.
- * Purpose: Performs full-text and fuzzy search across books and categories.
- * Logic: Leverages Supabase's text search capabilities.
+ * useHybridSearch Hook (v2.1 - Strict Type Safety)
+ * Filepath: lib/hooks/useSearch.ts
+ * Role: Central discovery engine combining Keyword (Catalog) and Vector (Verse) search.
+ * PRD Alignment: Section 4.3 (Hybrid Search) & 5.0 (Monetization Gate).
+ * Fix: Replaced 'any' types with strict DeepSearchResult interface for deep search results.
  */
 
 export interface SearchResult {
   id: string;
-  en_title: string;
-  he_title: string;
-  slug: string;
-  category: string;
-  author?: string;
-  type: "book" | "category";
+  ref: string;
+  en_title?: string; // For Book results
+  he_title?: string; // For Book results
+  hebrew_text?: string; // For Verse results
+  english_text?: string; // For Verse results
+  similarity?: number;
+  type: "book" | "verse";
 }
 
-export const useSearch = (query: string, categoryFilter?: string) => {
+/**
+ * Internal interface for raw verse-level search results
+ */
+interface DeepSearchResult {
+  id: string;
+  ref: string;
+  hebrew_text: string;
+  english_text: string;
+  similarity?: number;
+}
+
+export function useSearch(query: string, categoryFilter?: string) {
+  const supabase = createClient();
+  const { isPro } = useAuth();
+
   return useQuery({
-    queryKey: ["search", query, categoryFilter],
-    enabled: query.length >= 2,
+    queryKey: ["hybrid-search", query, categoryFilter, isPro],
+    enabled: query.length >= 3,
     queryFn: async (): Promise<SearchResult[]> => {
-      let supabaseQuery = supabase
+      // 1. Concurrent Execution: Search Catalog (Books) + Deep Search (Verses)
+
+      // Catalog Search (Keyword-based on library.books)
+      const catalogQuery = supabase
+        .schema("library")
         .from("books")
-        .select("id, en_title, he_title, slug, category, author")
-        // We use the 'or' filter to search both English and Hebrew titles
-        .or(`en_title.ilike.%${query}%,he_title.ilike.%${query}%`);
+        .select("id, slug, en_title, he_title, category_path")
+        .or(`en_title.ilike.%${query}%,he_title.ilike.%${query}%`)
+        .limit(5);
 
-      if (categoryFilter && categoryFilter !== "All") {
-        supabaseQuery = supabaseQuery.eq("category", categoryFilter);
+      // Deep Search Logic (Verse level)
+      let deepResults: SearchResult[] = [];
+
+      if (isPro) {
+        // PRD 5.0 / Manifest 6: Execute Semantic Search via Edge Function
+        const { data, error } = await supabase.functions.invoke(
+          "semantic-search",
+          {
+            body: { query, threshold: 0.4, limit: 15 },
+          }
+        );
+
+        if (!error && data) {
+          deepResults = (data as DeepSearchResult[]).map((v) => ({
+            ...v,
+            type: "verse",
+          }));
+        }
+      } else {
+        // Fallback: Standard Keyword Search on library.verses
+        const { data, error } = await supabase
+          .schema("library")
+          .from("verses")
+          .select("id, ref, hebrew_text, english_text")
+          .or(`english_text.ilike.%${query}%,hebrew_text.ilike.%${query}%`)
+          .limit(10);
+
+        if (!error && data) {
+          deepResults = (data as unknown as DeepSearchResult[]).map((v) => ({
+            ...v,
+            type: "verse",
+          }));
+        }
       }
 
-      const { data, error } = await supabaseQuery.limit(20);
+      const { data: catalogData } = await catalogQuery;
 
-      if (error) {
-        console.error("[Search] Error:", error.message);
-        throw error;
-      }
-
-      return (data || []).map((item) => ({
-        ...item,
+      // 2. Synthesize Results
+      const formattedCatalog: SearchResult[] = (catalogData || []).map((b) => ({
+        id: b.id,
+        ref: b.slug,
+        en_title: b.en_title,
+        he_title: b.he_title,
         type: "book",
       }));
+
+      // Interleave results: Books first, then high-relevance verses
+      return [...formattedCatalog, ...deepResults];
     },
-    staleTime: 1000 * 60 * 5, // Cache results for 5 minutes
+    staleTime: 1000 * 60 * 5, // 5-minute scholarly cache
   });
-};
+}

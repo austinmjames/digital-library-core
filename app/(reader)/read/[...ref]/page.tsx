@@ -1,126 +1,197 @@
-// Filepath: app/(reader)/read/[...ref]/page.tsx
-
 "use client";
 
+import { createClient } from "@/lib/supabase/client";
 import { ChevronRight, Loader2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // --- Imports from Refactored Architecture ---
-import { SideNav } from "@/components/layout/SideNav";
+import {
+  AnnotationLayer,
+  AnnotationMarker,
+} from "@/components/reader/AnnotationLayer";
 import { ContextPanel } from "@/components/reader/ContextPanel";
 import { ReaderHeader } from "@/components/reader/ReaderHeader";
-import { ReaderLayout } from "@/components/reader/ReaderLayout";
-import { VerseSegment } from "@/components/reader/VerseSegment";
+import { VirtualVerseList } from "@/components/reader/VirtualVerseList";
 import { useReaderSettings } from "@/lib/hooks/useReaderSettings";
-import { Verse } from "@/types/reader"; // Ensure this matches your type definition path
+import { normalizeVerses } from "@/lib/utils/utils";
+import { Verse } from "@/types/reader";
 
-// --- Mock Data Service (Simulating Supabase Fetch) ---
-const MOCK_VERSES_DATA: Verse[] = [
-  {
-    ref: "Genesis.1.1",
-    he: "בְּרֵאשִׁ֖ית בָּרָ֣א אֱלֹהִ֑ים אֵ֥ת הַשָּׁמַ֖יִם וְאֵ֥ת הָאָֽרֶץ׃",
-    en: "In the beginning God created the heaven and the earth.",
-    c1: 1,
-    c2: 1,
-  },
-  {
-    ref: "Genesis.1.2",
-    he: "וְהָאָ֗רֶץ הָיְתָ֥ה תֹ֙הוּ֙ וָבֹ֔הוּ וְחֹ֖שֶׁךְ עַל־פְּנֵ֣י תְה֑וֹם וְר֣וּחַ אֱלֹהִ֔ים מְרַחֶ֖פֶת עַל־פְּנֵ֥י הַמָּֽיִם׃",
-    en: "Now the earth was unformed and void, and darkness was upon the face of the deep; and the spirit of God hovered over the face of the waters.",
-    c1: 1,
-    c2: 2,
-  },
-  {
-    ref: "Genesis.1.3",
-    he: "וַיֹּ֥אמֶר אֱלֹהִ֖ים יְהִ֣י א֑וֹר וַֽיְהִי־אֽוֹר׃",
-    en: "And God said: Let there be light. And there was light.",
-    c1: 1,
-    c2: 3,
-  },
-  {
-    ref: "Genesis.1.4",
-    he: "וַיַּ֧רְא אֱלֹהִ֛ים אֶת־הָא֖וֹר כִּי־ט֑וֹב וַיַּבְדֵּ֣ל אֱלֹהִ֔ים בֵּ֥ין הָא֖וֹר וּבֵ֥ין הַחֹֽשֶׁךְ׃",
-    en: "And God saw the light, that it was good; and God divided the light from the darkness.",
-    c1: 1,
-    c2: 4,
-  },
-  {
-    ref: "Genesis.1.5",
-    he: "וַיִּקְרָ֨א אֱלֹהִ֤ים ׀ לָאֹור֙ י֔וֹם וְלַחֹ֖שֶׁךְ קָ֣רָא לָ֑יְלָה וַֽיְהִי־עֶ֥רֶב וַֽיְהִי־בֹ֖קֶר י֥וֹם אֶחָֽד׃",
-    en: "And God called the light Day, and the darkness He called Night. And there was evening and there was morning, one day.",
-    c1: 1,
-    c2: 5,
-  },
-];
+/**
+ * ReaderPage Orchestrator (v3.2)
+ * Filepath: app/(reader)/read/[...ref]/page.tsx
+ * Role: Master controller for the immersive reading experience.
+ * PRD Alignment: Deep Linking (READ-003), Analytics (AUD-001), History (LIB-003).
+ * Fixes: Removed redundant ReaderLayout dependency and invalid client-side metadata export.
+ */
 
 export default function ReaderPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const supabase = createClient();
+  const settings = useReaderSettings();
 
-  // 1. Hook Integration (State Management)
-  const settings = useReaderSettings(); // theme, fontSize, context, setters...
-
-  // 2. Local UI State
-  const [activeNavTab, setActiveNavTab] = useState("library");
+  // --- UI State ---
+  const [activeRef, setActiveRef] = useState<string>("");
   const [activeVerse, setActiveVerse] = useState<Verse | null>(null);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+
+  // --- Data State ---
   const [verses, setVerses] = useState<Verse[]>([]);
+  const [markers, setMarkers] = useState<AnnotationMarker[]>([]);
+  const [bookMeta, setBookMeta] = useState<{
+    id: string;
+    title: string;
+    structure: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 3. Route Parsing (Genesis.1 -> Book: Genesis, Chapter: 1)
-  // params.ref is string[] (e.g. ['Genesis', '1'])
-  const bookSlug = params.ref?.[0] || "Genesis";
-  const chapterSlug = params.ref?.[1] || "1";
+  // --- Ref Parsing ---
+  const refSegments = useMemo(() => {
+    const r = params?.ref;
+    if (!r) return ["Genesis", "1"];
+    return Array.isArray(r) ? r : [r];
+  }, [params?.ref]);
 
-  const displayBookTitle = bookSlug.charAt(0).toUpperCase() + bookSlug.slice(1);
+  const bookSlug = refSegments[0] ?? "";
+  const chapterSlug = refSegments[1] ?? "1";
+  const queryRef = refSegments.join(".");
 
-  // 4. Data Fetching Effect
+  const focusRef = searchParams.get("focus");
+  const versionId = searchParams.get("v");
+
+  const lastSyncedRef = useRef<string>("");
+
+  // --- Data Fetching ---
   useEffect(() => {
     const loadData = async () => {
-      setIsLoading(true);
-      // Simulate network latency
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      if (!bookSlug) return;
 
-      // In production: const data = await supabase.from('verses').select('*')...
-      setVerses(MOCK_VERSES_DATA);
-      setIsLoading(false);
+      setIsLoading(true);
+      try {
+        // 1. Fetch Book Metadata
+        const { data: bookData } = await supabase
+          .schema("library")
+          .from("books")
+          .select("id, en_title, structure_type")
+          .eq("slug", bookSlug)
+          .single();
+
+        if (bookData) {
+          setBookMeta({
+            id: bookData.id as string,
+            title: bookData.en_title as string,
+            structure: (bookData.structure_type as string) || "CHAPTER_VERSE",
+          });
+        }
+
+        // 2. Fetch Verses using ltree path
+        const pathPrefix = queryRef.replace(/\./g, "_");
+        const { data: dbVerses, error } = await supabase
+          .schema("library")
+          .from("verses")
+          .select("*")
+          .or(`path.eq.${pathPrefix},path.<@.${pathPrefix}`)
+          .order("c1", { ascending: true })
+          .order("c2", { ascending: true });
+
+        if (error) throw error;
+
+        if (dbVerses) {
+          const normalized = normalizeVerses(dbVerses);
+          setVerses(normalized);
+
+          // Mocking markers for the AnnotationLayer based on content density (PRD Discovery)
+          const mockMarkers: AnnotationMarker[] = normalized
+            .filter((_, i) => i % 5 === 0)
+            .map((v, i) => ({
+              id: `marker_${i}`,
+              ref: v.ref,
+              note_count: Math.floor(Math.random() * 5) + 1,
+              type: i % 3 === 0 ? "ai" : i % 3 === 1 ? "personal" : "community",
+            }));
+          setMarkers(mockMarkers);
+
+          if (focusRef) {
+            setActiveRef(focusRef);
+            const target = normalized.find((v) => v.ref === focusRef);
+            if (target) {
+              setActiveVerse(target);
+              setIsSidePanelOpen(true);
+            }
+          } else if (normalized.length > 0) {
+            setActiveRef(normalized[0].ref);
+          }
+        }
+      } catch (err) {
+        console.error("Reader Load Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     loadData();
-  }, [bookSlug, chapterSlug]);
+  }, [queryRef, focusRef, bookSlug, versionId, supabase]);
 
-  // 5. Interaction Handlers
-  const handleVerseClick = (verse: Verse) => {
-    setActiveVerse(verse);
-    setIsSidePanelOpen(true);
+  // --- Handlers ---
+
+  const handleVerseClick = useCallback(
+    (ref: string) => {
+      const verse = verses.find((v) => v.ref === ref);
+      if (verse) {
+        setActiveRef(ref);
+        setActiveVerse(verse);
+        setIsSidePanelOpen(true);
+
+        const url = new URL(window.location.href);
+        url.searchParams.set("focus", ref);
+        window.history.replaceState(null, "", url.toString());
+      }
+    },
+    [verses]
+  );
+
+  const handleVerseVisible = useCallback(
+    async (ref: string) => {
+      setActiveRef(ref);
+      if (ref !== lastSyncedRef.current) {
+        lastSyncedRef.current = ref;
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user) {
+          await supabase.rpc("track_verse_view", {
+            p_user_id: authData.user.id,
+            p_ref: ref,
+          });
+        }
+      }
+    },
+    [supabase]
+  );
+
+  const handleSidebarToggle = () => setIsSidePanelOpen(!isSidePanelOpen);
+
+  const handleNextChapter = () => {
+    const nextChap = parseInt(chapterSlug) + 1;
+    router.push(
+      `/read/${bookSlug}/${nextChap}${versionId ? `?v=${versionId}` : ""}`
+    );
   };
 
-  const handleSidebarToggle = () => {
-    setIsSidePanelOpen(!isSidePanelOpen);
-  };
+  const sectionLabel = useMemo(() => {
+    if (bookMeta?.structure === "DAF_LINE") return `Daf ${chapterSlug}`;
+    if (bookMeta?.structure === "SIMAN_SEIF") return `Siman ${chapterSlug}`;
+    return `Chapter ${chapterSlug}`;
+  }, [bookMeta, chapterSlug]);
 
   return (
-    <ReaderLayout
-      theme={settings.theme}
-      // A. Global Navigation
-      sideNav={
-        <SideNav
-          activeTab={activeNavTab}
-          setActiveTab={(tab: string) => {
-            // Added explicit type annotation here
-            setActiveNavTab(tab);
-            if (tab === "library") router.push("/library");
-          }}
-        />
-      }
-      // B. Header Toolbar
-      header={
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-paper relative z-10">
+      {/* 1. Scholarly Header (AA Settings & Breadcrumbs) */}
+      <div className="shrink-0">
         <ReaderHeader
-          book={displayBookTitle}
-          chapter={chapterSlug}
+          book={bookMeta?.title || bookSlug}
+          chapter={sectionLabel}
           toggleSidebar={handleSidebarToggle}
-          // Pass settings from hook
           context={settings.context}
           setContext={settings.setContext}
           fontSize={settings.fontSize}
@@ -129,53 +200,94 @@ export default function ReaderPage() {
           theme={settings.theme}
           setTheme={settings.setTheme}
         />
-      }
-      // C. Right Context Panel
-      sidePanel={
-        <ContextPanel
-          isOpen={isSidePanelOpen}
-          activeVerse={activeVerse}
-          onClose={() => setIsSidePanelOpen(false)}
-          context={settings.context}
-        />
-      }
-    >
-      {/* D. Main Content (Scrollport) */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center h-[50vh] gap-4 text-zinc-400">
-          <Loader2 className="animate-spin text-zinc-300" size={32} />
-          <p className="text-xs font-bold uppercase tracking-widest">
-            Summoning the Canon...
-          </p>
-        </div>
-      ) : (
-        <div
-          className={`min-h-screen transition-colors ${
-            settings.theme === "dark" ? "bg-zinc-950" : "bg-transparent"
-          }`}
-        >
-          {verses.map((verse) => (
-            <VerseSegment
-              key={verse.ref}
-              verse={verse}
-              isActive={activeVerse?.ref === verse.ref}
-              onClick={handleVerseClick}
-              theme={settings.theme}
-              fontSize={settings.fontSize}
-            />
-          ))}
+      </div>
 
-          {/* Infinite Scroll Trigger */}
-          <div className="py-16 text-center">
-            <button className="text-zinc-400 text-sm hover:text-zinc-600 transition-colors flex items-center justify-center gap-2 mx-auto group">
-              <span className="group-hover:underline">
-                Load Chapter {parseInt(chapterSlug) + 1}
-              </span>
-              <ChevronRight size={14} />
-            </button>
+      {/* 2. Main Body Container */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Main Manuscript Area */}
+        <main className="flex-1 relative overflow-hidden flex flex-col">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-400">
+              <Loader2 className="animate-spin text-zinc-300" size={32} />
+              <p className="text-[10px] font-black uppercase tracking-[0.4em]">
+                Summoning the Canon...
+              </p>
+            </div>
+          ) : verses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-zinc-400 p-10 text-center">
+              <p className="text-2xl font-black mb-4 text-zinc-900 font-serif italic uppercase tracking-tighter">
+                This section is silent.
+              </p>
+              <p className="text-xs font-medium max-w-xs mx-auto mb-10 text-zinc-400 leading-relaxed">
+                The manuscript registers for {queryRef} are empty or restricted.
+              </p>
+              <button
+                onClick={() => router.push("/library")}
+                className="px-10 py-4 bg-zinc-950 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl active:scale-95 transition-all"
+              >
+                Return to library
+              </button>
+            </div>
+          ) : (
+            <div className="h-full w-full flex flex-col relative">
+              {/* Floating Discovery Radar Layer (PRD 3.2) */}
+              <div className="absolute right-8 top-8 z-20 w-80 hidden xl:block pointer-events-auto">
+                <AnnotationLayer
+                  markers={markers}
+                  activeRef={activeRef}
+                  onMarkerClick={handleVerseClick}
+                />
+              </div>
+
+              {/* Scrollable Virtualized Text Engine */}
+              <div className="flex-1 overflow-hidden">
+                <VirtualVerseList
+                  verses={verses}
+                  activeRef={activeRef}
+                  onVerseVisible={handleVerseVisible}
+                  onVerseClick={handleVerseClick}
+                  theme={settings.theme}
+                  layout={settings.layout}
+                  fontSize={settings.fontSize}
+                  isSidePanelOpen={isSidePanelOpen}
+                  hasNextPage={false}
+                  isFetchingNextPage={false}
+                />
+              </div>
+
+              {/* Seamless Navigation Footer */}
+              <div className="py-12 text-center border-t border-zinc-100 bg-white/80 backdrop-blur-xl">
+                <button
+                  onClick={handleNextChapter}
+                  className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.4em] hover:text-zinc-950 transition-all flex items-center justify-center gap-4 mx-auto group ring-1 ring-zinc-100 px-8 py-4 rounded-full hover:ring-zinc-950 hover:shadow-2xl"
+                >
+                  <span className="group-hover:translate-x-[-2px] transition-transform">
+                    Proceed to Next Section
+                  </span>
+                  <ChevronRight
+                    size={14}
+                    className="group-hover:translate-x-[2px] transition-transform text-amber-500"
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* 3. Contextual Metadata Panel (Right Sidebar) */}
+        {isSidePanelOpen && (
+          <div className="shrink-0 h-full">
+            <ContextPanel
+              activeVerse={activeVerse}
+              onClose={() => setIsSidePanelOpen(false)}
+              context={settings.context}
+            />
           </div>
-        </div>
-      )}
-    </ReaderLayout>
+        )}
+      </div>
+
+      {/* Subtle Paper Texture Layer */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.02] bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')] z-50" />
+    </div>
   );
 }

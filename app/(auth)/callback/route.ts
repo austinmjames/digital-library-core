@@ -3,28 +3,39 @@ import { NextResponse } from "next/server";
 
 /**
  * DrashX Auth Callback Handler
- * Role: Exchanges the auth code for a session and redirects the user.
- * Fix: Added 'await' to createClient() to resolve the Promise-based client error.
+ * Role: Exchanges auth code for session and handles Onboarding vs. Library redirection.
+ * PRD Reference: Authentication & Onboarding (Section 2.2)
  */
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  // 'next' allows dynamic redirection after successful verification
   const next = searchParams.get("next") ?? "/library";
 
   if (code) {
-    // Because createClient in server.ts is async, we must await it here.
     const supabase = await createClient();
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    // Exchange the code for a permanent session
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.user) {
+      // Check for onboarding completion to satisfy PRD Onboarding Wizard requirement
+      const { data: profile } = await supabase
+        .from("users")
+        .select("onboarding_complete")
+        .eq("id", data.user.id)
+        .single();
 
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      // If onboarding isn't complete, override 'next' to the wizard
+      const redirectUrl = profile?.onboarding_complete ? next : "/onboarding";
+
+      // Ensure the redirect is internal to prevent open-redirect vulnerabilities
+      const safeRedirect = redirectUrl.startsWith("/")
+        ? `${origin}${redirectUrl}`
+        : `${origin}/library`;
+
+      return NextResponse.redirect(safeRedirect);
     }
   }
 
-  // If there is an error or no code, redirect to an error page or login
+  // Fallback for failed verification
   return NextResponse.redirect(`${origin}/auth/auth-code-error`);
 }

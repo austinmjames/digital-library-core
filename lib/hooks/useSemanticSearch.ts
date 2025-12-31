@@ -1,107 +1,125 @@
-import { supabase } from "@/lib/supabase/client";
-import { useQuery, UseQueryResult } from "@tanstack/react-query";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 /**
- * useSemanticSearch Hook (v1.2 - Native Fetch & Strict Types)
- * Filepath: lib/hooks/useSemanticSearch.ts
- * Role: Performs a library-wide conceptual search using text embeddings.
- * Alignment: PRD Section 4.2 (Semantic Discovery).
+ * useHybridSearch Hook (v2.2 - Unified Discovery)
+ * Filepath: lib/hooks/useSearch.ts
+ * Role: Central discovery engine combining Keyword (Catalog) and Vector (Verse) search.
+ * PRD Alignment: Section 4.3 (Hybrid Search) & 5.0 (Monetization Gate).
+ * Logic: Securely delegates semantic logic to Edge Functions and applies category filters.
  */
 
-const apiKey = ""; // Provided by environment at runtime
-const EMBED_MODEL = "text-embedding-004";
-const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${apiKey}`;
+export interface SearchResult {
+  id: string;
+  ref: string;
+  en_title?: string; // For Book results
+  he_title?: string; // For Book results
+  hebrew_text?: string; // For Verse results
+  english_text?: string; // For Verse results
+  similarity?: number;
+  type: "book" | "verse";
+}
 
-export interface SemanticSearchResult {
+/**
+ * Internal interface for raw verse-level search results
+ */
+interface DeepSearchResult {
   id: string;
   ref: string;
   hebrew_text: string;
   english_text: string;
-  similarity: number;
+  similarity?: number;
 }
 
-interface GeminiEmbedResponse {
-  embedding: {
-    values: number[];
-  };
-  error?: { message: string };
-}
+export function useSearch(query: string, categoryFilter: string = "All") {
+  const supabase = createClient();
+  const { isPro } = useAuth();
 
-/**
- * Helper: Exponential backoff fetch for Gemini Embedding API
- */
-async function fetchEmbeddingWithBackoff(
-  text: string,
-  retries = 5
-): Promise<number[]> {
-  let delay = 1000;
-  const payload = {
-    content: { parts: [{ text }] },
-  };
+  return useQuery({
+    queryKey: ["hybrid-search", query, categoryFilter, isPro],
+    enabled: query.length >= 3,
+    queryFn: async (): Promise<SearchResult[]> => {
+      // 1. Concurrent Execution: Search Catalog (Books) + Deep Search (Verses)
 
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(EMBED_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // Catalog Search (Keyword-based on library.books)
+      let catalogQuery = supabase
+        .schema("library")
+        .from("books")
+        .select("id, slug, en_title, he_title, category_path")
+        .or(`en_title.ilike.%${query}%,he_title.ilike.%${query}%`);
 
-      const result = (await response.json()) as GeminiEmbedResponse;
-
-      if (response.ok && result.embedding?.values) {
-        return result.embedding.values;
+      if (categoryFilter !== "All") {
+        catalogQuery = catalogQuery.ilike(
+          "category_path",
+          `%${categoryFilter}%`
+        );
       }
 
-      if (response.status === 429 || response.status >= 500) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-        continue;
+      const catalogDataPromise = catalogQuery.limit(5);
+
+      // Deep Search Logic (Verse level)
+      let deepResults: SearchResult[] = [];
+
+      if (isPro) {
+        // PRD 5.0 / Manifest 6: Execute Secure Semantic Search via Edge Function
+        // Passes the categoryFilter to the Edge Function for refined synthesis
+        const { data, error } = await supabase.functions.invoke(
+          "semantic-search",
+          {
+            body: {
+              query,
+              threshold: 0.4,
+              limit: 15,
+              category: categoryFilter !== "All" ? categoryFilter : undefined,
+            },
+          }
+        );
+
+        if (!error && data) {
+          deepResults = (data as DeepSearchResult[]).map((v) => ({
+            ...v,
+            type: "verse",
+          }));
+        }
+      } else {
+        // Fallback: Standard Keyword Search on library.verses
+        // Fixed: Use 'const' as 'fallbackQuery' is never reassigned.
+        const fallbackQuery = supabase
+          .schema("library")
+          .from("verses")
+          .select("id, ref, hebrew_text, english_text")
+          .or(`english_text.ilike.%${query}%,hebrew_text.ilike.%${query}%`);
+
+        if (categoryFilter !== "All") {
+          // Note: In a full implementation, we'd join with books to filter verses by category
+          // For the MVP, we assume global keyword search for free tier.
+        }
+
+        const { data, error } = await fallbackQuery.limit(10);
+
+        if (!error && data) {
+          deepResults = (data as unknown as DeepSearchResult[]).map((v) => ({
+            ...v,
+            type: "verse",
+          }));
+        }
       }
 
-      throw new Error(result.error?.message || "Embedding Request Failed");
-    } catch (err) {
-      if (i === retries - 1) throw err;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      delay *= 2;
-    }
-  }
-  throw new Error("Maximum retries reached for Embedding request");
-}
+      const { data: catalogData } = await catalogDataPromise;
 
-/**
- * Hook to perform library-wide semantic search.
- * Resolves: 'Cannot find module' by moving to native fetch.
- */
-export const useSemanticSearch = (
-  query: string,
-  category: string = "All"
-): UseQueryResult<SemanticSearchResult[], Error> => {
-  return useQuery<SemanticSearchResult[], Error>({
-    queryKey: ["semantic-search", query, category],
-    enabled: query.length > 3,
-    queryFn: async (): Promise<SemanticSearchResult[]> => {
-      // 1. Vectorize the User Query using Gemini
-      const embedding = await fetchEmbeddingWithBackoff(query);
+      // 2. Synthesize Results
+      const formattedCatalog: SearchResult[] = (catalogData || []).map((b) => ({
+        id: b.id,
+        ref: b.slug,
+        en_title: b.en_title,
+        he_title: b.he_title,
+        type: "book",
+      }));
 
-      // 2. Query the Vector Bedrock via Supabase RPC
-      const { data, error } = await supabase.rpc("semantic_search_verses", {
-        query_embedding: embedding,
-        p_lang: "en",
-        match_threshold: 0.45,
-        match_count: 20,
-        p_category_filter: category,
-      });
-
-      if (error) {
-        console.error("[SemanticEngine] Search error:", error.message);
-        throw error;
-      }
-
-      // Explicitly cast the RPC results to the result interface
-      return (data as unknown as SemanticSearchResult[]) || [];
+      // Interleave results: Hierarchical books first, then high-relevance verse fragments
+      return [...formattedCatalog, ...deepResults];
     },
-    // Cache conceptual results for 5 minutes
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // 5-minute scholarly cache
   });
-};
+}

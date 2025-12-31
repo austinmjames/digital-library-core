@@ -1,78 +1,189 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { Layout, Theme } from "@/types/reader";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 /**
- * Theme Context Provider
+ * Reader Settings Context (v2.0)
  * Filepath: lib/context/ThemeContext.tsx
- * Role: Phase 1/2 Refinement - Global Style Persistence.
- * Purpose: Manages the 'paper', 'sepia', and 'dark' design tokens across the app.
+ * Role: Single source of truth for the 'AA' Reading Environment.
+ * PRD Alignment: Section 2.12 (Appearance Persistence) & 3.2 (The Reader).
+ * Logic: Dual-layer persistence (LocalStorage for speed + Supabase for cross-device sync).
  */
 
-export type Theme = "paper" | "sepia" | "dark";
+export type ReaderContextMode = "GLOBAL" | "GROUP" | "PRIVATE";
 
-interface ThemeContextType {
+interface ReaderSettings {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
-  toggleTheme: () => void;
+  fontSize: number;
+  lineHeight: number;
+  layout: Layout;
+  languageMode: "bi" | "he" | "en";
+  contextMode: ReaderContextMode;
 }
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+interface SettingsContextType extends ReaderSettings {
+  setTheme: (t: Theme) => void;
+  setContextMode: (c: ReaderContextMode) => void;
+  setLayout: (l: Layout) => void;
+  setLanguageMode: (m: "bi" | "he" | "en") => void;
+  increaseFont: () => void;
+  decreaseFont: () => void;
+  setLineHeight: (h: number) => void;
+}
+
+const SettingsContext = createContext<SettingsContextType | undefined>(
+  undefined
+);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [theme, setTheme] = useState<Theme>("paper");
+  const supabase = createClient();
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [settings, setSettings] = useState<ReaderSettings>({
+    theme: "paper",
+    fontSize: 20,
+    lineHeight: 1.6,
+    layout: "stacked",
+    languageMode: "bi",
+    contextMode: "GLOBAL",
+  });
+
   const [mounted, setMounted] = useState(false);
 
-  // 1. Initial hydration: load from localStorage
+  // 1. Initial Load (Hydration)
   useEffect(() => {
-    const savedTheme = localStorage.getItem("drashx-theme") as Theme;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    }
-    setMounted(true);
-  }, []);
+    const initSettings = async () => {
+      // a. Immediate load from LocalStorage to prevent flicker
+      const saved = localStorage.getItem("drashx-settings");
+      if (saved) {
+        try {
+          setSettings(JSON.parse(saved));
+        } catch (e) {
+          console.error("Local settings corrupt:", e);
+        }
+      }
 
-  // 2. Sync to localStorage and Document Body
+      // b. Background Cloud Sync (Supabase)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from("user_settings")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (data && !error) {
+          const synced: ReaderSettings = {
+            theme: data.default_theme as Theme,
+            fontSize: data.font_size,
+            lineHeight: data.line_height ?? 1.6,
+            layout: (data.layout_mode as Layout) ?? "stacked",
+            languageMode: (data.language_mode as "bi" | "he" | "en") ?? "bi",
+            contextMode: "GLOBAL", // Session-based, usually defaults to global
+          };
+          setSettings(synced);
+        }
+      }
+      setMounted(true);
+    };
+
+    initSettings();
+  }, [supabase]);
+
+  // 2. DOM & Variable Side-Effects
   useEffect(() => {
     if (!mounted) return;
 
-    localStorage.setItem("drashx-theme", theme);
-
-    // Apply class to HTML element for global CSS targeting
     const root = window.document.documentElement;
-    root.classList.remove("paper", "sepia", "dark");
-    root.classList.add(theme);
 
-    // Sync metadata theme-color for mobile browsers
+    // Theme class application
+    root.classList.remove("paper", "sepia", "dark");
+    root.classList.add(settings.theme);
+
+    // CSS Variable injection for high-performance font scaling
+    root.style.setProperty("--reader-font-size", `${settings.fontSize}px`);
+    root.style.setProperty("--reader-line-height", `${settings.lineHeight}`);
+
+    // Browser HUD color sync
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     const colors = { paper: "#faf9f6", sepia: "#f4ecd8", dark: "#09090b" };
     if (metaThemeColor) {
-      metaThemeColor.setAttribute("content", colors[theme]);
+      metaThemeColor.setAttribute("content", colors[settings.theme]);
     }
-  }, [theme, mounted]);
 
-  const toggleTheme = () => {
-    setTheme((prev) => {
-      if (prev === "paper") return "sepia";
-      if (prev === "sepia") return "dark";
-      return "paper";
+    localStorage.setItem("drashx-settings", JSON.stringify(settings));
+  }, [settings, mounted]);
+
+  // 3. Debounced Cloud Persistence
+  const persistToCloud = useCallback(
+    (updated: ReaderSettings) => {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+
+      syncTimeoutRef.current = setTimeout(async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        await supabase.from("user_settings").upsert({
+          user_id: user.id,
+          default_theme: updated.theme,
+          font_size: updated.fontSize,
+          line_height: updated.lineHeight,
+          layout_mode: updated.layout,
+          language_mode: updated.languageMode,
+          updated_at: new Date().toISOString(),
+        });
+      }, 2000);
+    },
+    [supabase]
+  );
+
+  // 4. Action Handlers
+  const update = (patch: Partial<ReaderSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      persistToCloud(next);
+      return next;
     });
   };
 
+  const actions = {
+    setTheme: (theme: Theme) => update({ theme }),
+    setContextMode: (contextMode: ReaderContextMode) => update({ contextMode }),
+    setLayout: (layout: Layout) => update({ layout }),
+    setLanguageMode: (languageMode: "bi" | "he" | "en") =>
+      update({ languageMode }),
+    increaseFont: () =>
+      update({ fontSize: Math.min(settings.fontSize + 2, 48) }),
+    decreaseFont: () =>
+      update({ fontSize: Math.max(settings.fontSize - 2, 12) }),
+    setLineHeight: (lineHeight: number) => update({ lineHeight }),
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-      {/* Prevent hydration flicker by not rendering children until mounted */}
-      <div style={{ visibility: mounted ? "visible" : "hidden" }}>
-        {children}
-      </div>
-    </ThemeContext.Provider>
+    <SettingsContext.Provider value={{ ...settings, ...actions }}>
+      {/* Visibility hidden until mounted to prevent hydration flash of mismatched themes */}
+      <div className={mounted ? "contents" : "invisible"}>{children}</div>
+    </SettingsContext.Provider>
   );
 };
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext);
+  const context = useContext(SettingsContext);
   if (context === undefined) {
     throw new Error("useTheme must be used within a ThemeProvider");
   }

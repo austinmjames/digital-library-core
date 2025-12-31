@@ -1,12 +1,13 @@
-import { supabase } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 /**
- * useXP Hook
+ * useXP Hook (v2.0)
  * Filepath: lib/hooks/useXP.ts
- * Role: Gamification Controller.
- * Purpose: Triggers the XP reward transaction when a portion is completed.
- * Alignment: PRD Section 2.4 (Gamification & Progression).
+ * Role: Gamification Controller & Reward Transaction Engine.
+ * PRD Alignment: Section 2.4 (Progression & XP Tracking).
+ * Fix: Added user session verification and precision query invalidation.
  */
 
 interface XPMutationParams {
@@ -15,18 +16,26 @@ interface XPMutationParams {
 }
 
 export const useXP = () => {
+  const supabase = createClient();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ scheduleId, xp = 50 }: XPMutationParams) => {
+    mutationFn: async ({ scheduleId, xp = 25 }: XPMutationParams) => {
+      if (!user)
+        throw new Error("Authentication required for scholarship rewards.");
+
+      // RPC: complete_portion_and_reward_xp
+      // Logic: Inserts into user_study_progress and increments user_levels.current_xp
       const { error } = await supabase.rpc("complete_portion_and_reward_xp", {
+        p_user_id: user.id,
         p_schedule_id: scheduleId,
         p_xp_amount: xp,
       });
 
       if (error) {
         console.error(
-          "[GamificationEngine] XP Transaction failed:",
+          "[GamificationEngine] Transaction failed:",
           error.message
         );
         throw error;
@@ -35,10 +44,15 @@ export const useXP = () => {
       return true;
     },
     onSuccess: () => {
-      // Resolved: Removed unused '_' and 'variables' parameters to satisfy linter.
-      // Invalidate both study plan and user stats to reflect the new XP/Streak.
+      // 1. Invalidate temporal study plan (marks the card as 'Mastered')
       queryClient.invalidateQueries({ queryKey: ["study-plan"] });
-      queryClient.invalidateQueries({ queryKey: ["user-stats"] });
+
+      // 2. Invalidate dashboard stats (updates Flame Score and Level)
+      // Standardizes key with DashboardPage.tsx and useAuth.ts patterns
+      queryClient.invalidateQueries({
+        queryKey: ["dashboard-user-stats", user?.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["user-profile", user?.id] });
     },
   });
 };

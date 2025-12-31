@@ -5,29 +5,21 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 /**
- * Stripe Webhook Handler (v1.3 - Type Safe & Production Ready)
+ * Stripe Webhook Handler (DrashX Edition)
  * Filepath: app/api/stripe/webhook/route.ts
- * Role: Phase 6 - Tier & Subscription Lifecycle.
- * Updates:
- * - Replaced all 'any' types with official Stripe interfaces.
- * - Added metadata interface for type-safe Supabase ID retrieval.
+ * Role: Manages the transition between 'Talmid' (Free) and 'Chaver' (Pro) tiers.
+ * PRD Alignment: Section 5 (Monetization) & Section 2.1 (Social Identity/Notifications).
  */
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-// Admin client for backend operations (Service Role)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-interface DrashCheckoutMetadata {
-  supabase_user_id: string;
-}
-
 export async function POST(req: Request) {
   const body = await req.text();
-
   const headerList = await headers();
   const signature = headerList.get("stripe-signature");
 
@@ -41,22 +33,20 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[Stripe Webhook] Error: ${message}`);
     return NextResponse.json(
       { error: `Webhook Error: ${message}` },
       { status: 400 }
     );
   }
 
-  // 1. Handle Successful Checkout (Initial Upgrade)
+  // 1. Initial Upgrade Logic
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    const metadata = session.metadata as unknown as DrashCheckoutMetadata;
-    const userId = metadata?.supabase_user_id;
+    const userId = session.metadata?.supabase_user_id;
     const customerId = session.customer as string;
 
     if (userId) {
-      const { error } = await supabaseAdmin
+      await supabaseAdmin
         .from("users")
         .update({
           tier: "pro",
@@ -64,58 +54,72 @@ export async function POST(req: Request) {
         })
         .eq("id", userId);
 
-      if (error) {
-        console.error("[Stripe Webhook] Checkout Update Error:", error);
-        return NextResponse.json(
-          { error: "Database update failed" },
-          { status: 500 }
-        );
-      }
-      console.log(`[Stripe Webhook] User ${userId} upgraded via checkout.`);
+      // Create System Notification (PRD 2.1)
+      await supabaseAdmin.from("notifications").insert({
+        user_id: userId,
+        type: "SYSTEM",
+        payload: {
+          title: "Tier Upgraded",
+          message:
+            "Welcome to the Chaver (Pro) tier. Custom avatars are now unlocked.",
+          icon: "Trophy",
+        },
+      });
     }
   }
 
-  // 2. Handle Subscription Updates (Renewals/Changes)
+  // 2. Subscription Sync Logic (Renewals / Status Changes)
   if (event.type === "customer.subscription.updated") {
     const subscription = event.data.object as Stripe.Subscription;
     const customerId = subscription.customer as string;
     const status = subscription.status;
+    const isPro = status === "active" || status === "trialing";
 
-    // Pro status maintained for active/trialing, otherwise revert to free
-    const newTier =
-      status === "active" || status === "trialing" ? "pro" : "free";
-
-    await supabaseAdmin
+    const { data: user } = await supabaseAdmin
       .from("users")
-      .update({ tier: newTier })
-      .eq("stripe_customer_id", customerId);
+      .update({ tier: isPro ? "pro" : "free" })
+      .eq("stripe_customer_id", customerId)
+      .select("id")
+      .single();
 
-    console.log(
-      `[Stripe Webhook] Subscription updated for customer ${customerId}: ${status}`
-    );
+    if (!isPro && user) {
+      // Notify user of tier revert
+      await supabaseAdmin.from("notifications").insert({
+        user_id: user.id,
+        type: "SYSTEM",
+        payload: {
+          title: "Subscription Updated",
+          message:
+            "Your Pro status has expired. Reverting to Talmid (Free) tier.",
+          icon: "AlertCircle",
+        },
+      });
+    }
   }
 
-  // 3. Handle Cancellation / Deletion
-  if (event.type === "customer.subscription.deleted") {
-    const subscription = event.data.object as Stripe.Subscription;
-    const customerId = subscription.customer as string;
+  // 3. Payment Failure Alert
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const customerId = invoice.customer as string;
 
-    const { error } = await supabaseAdmin
+    const { data: user } = await supabaseAdmin
       .from("users")
-      .update({ tier: "free" })
-      .eq("stripe_customer_id", customerId);
+      .select("id")
+      .eq("stripe_customer_id", customerId)
+      .single();
 
-    if (error) {
-      console.error("[Stripe Webhook] Deletion Error:", error);
-      return NextResponse.json(
-        { error: "Database downgrade failed" },
-        { status: 500 }
-      );
+    if (user) {
+      await supabaseAdmin.from("notifications").insert({
+        user_id: user.id,
+        type: "SYSTEM",
+        payload: {
+          title: "Payment Action Required",
+          message:
+            "We encountered an issue with your last payment. Please update your billing info to maintain Pro access.",
+          icon: "CreditCard",
+        },
+      });
     }
-
-    console.log(
-      `[Stripe Webhook] Subscription deleted for customer: ${customerId}`
-    );
   }
 
   return NextResponse.json({ received: true });

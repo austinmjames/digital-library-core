@@ -1,138 +1,120 @@
-import { supabase } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
- * useTranslations Hook (PRD Aligned)
+ * useTranslations Hook (v2.1 - Strict Type Safety)
  * Filepath: lib/hooks/useTranslations.ts
- * Role: Connects 'user_resources' (Project) to 'translation_segments' (Data).
- * Alignment: PRD Section 2.2 (Marketplace & Translation workflow).
+ * Role: Orchestrates segment-by-segment translation projects.
+ * PRD Alignment: Section 2.2 (Translation Workflow).
+ * Fix: Replaced 'any' with explicit RawTranslationWorkSegment interface for RPC response.
  */
 
 export interface TranslationSegment {
-  id?: string;
-  resource_id: string;
   ref: string;
-  translated_content: string;
+  hebrew_source: string;
+  english_source: string;
+  translated_content: string | null;
+  segment_order: number;
 }
 
-export interface TranslationProject {
-  id: string;
-  title: string;
+/**
+ * Internal interface representing the return table from
+ * public.get_translation_work_segments RPC.
+ */
+interface RawTranslationWorkSegment {
+  ref: string;
+  hebrew_source: string;
+  english_source: string;
+  user_translation: string | null;
+  segment_order: number;
 }
 
-export const useTranslations = (bookSlug: string | null) => {
+export const useTranslations = (resourceId: string | null) => {
+  const supabase = createClient();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  // 1. Fetch or Initialize the Translation Project for this Book
-  const { data: project } = useQuery<TranslationProject | null, Error>({
-    queryKey: ["translation-project", bookSlug],
-    enabled: !!bookSlug,
-    queryFn: async (): Promise<TranslationProject | null> => {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) {
-        console.error(
-          "[TranslationEngine] Auth verification failed:",
-          authError.message
-        );
-        return null;
-      }
-
-      if (!user) return null;
-
-      const { data, error: projectError } = await supabase
-        .from("user_resources")
-        .select("id, title")
-        .eq("user_id", user.id)
-        .eq("type", "TRANSLATION")
-        .ilike("title", `%${bookSlug}%`)
-        .limit(1)
-        .maybeSingle();
-
-      // Resolved: 'projectError' is explicitly checked and logged
-      if (projectError) {
-        console.error(
-          "[TranslationEngine] Project lookup failed:",
-          projectError.message
-        );
-        throw projectError;
-      }
-
-      return data as TranslationProject | null;
-    },
-  });
-
-  // 2. Fetch Segments if Project Exists
+  // 1. Fetch Hydrated Segments (Source + Translation)
+  // Aligns with supabase/migrations/20240528_studio_refinement.sql
   const { data: segments, isLoading } = useQuery<TranslationSegment[], Error>({
-    queryKey: ["translation-segments", project?.id],
-    enabled: !!project?.id,
+    queryKey: ["translation-work-segments", resourceId],
+    enabled: !!resourceId && !!user,
     queryFn: async (): Promise<TranslationSegment[]> => {
-      if (!project?.id) return [];
+      if (!resourceId) return [];
 
-      const { data, error: segmentsError } = await supabase
-        .from("translation_segments")
-        .select("*")
-        .eq("resource_id", project.id);
+      const { data, error } = await supabase.rpc(
+        "get_translation_work_segments",
+        {
+          p_resource_id: resourceId,
+        }
+      );
 
-      // Resolved: 'segmentsError' is explicitly checked and logged
-      if (segmentsError) {
+      if (error) {
         console.error(
-          "[TranslationEngine] Segment fetch failed:",
-          segmentsError.message
+          "[TranslationEngine] Segment hydration failed:",
+          error.message
         );
-        throw segmentsError;
+        throw error;
       }
 
-      return (data as TranslationSegment[]) || [];
+      // Map RPC result using strict interface to resolve 'any' linting errors
+      // Maps database 'user_translation' to UI 'translated_content'
+      return ((data as unknown as RawTranslationWorkSegment[]) || []).map(
+        (row) => ({
+          ref: row.ref,
+          hebrew_source: row.hebrew_source,
+          english_source: row.english_source,
+          translated_content: row.user_translation,
+          segment_order: row.segment_order,
+        })
+      );
     },
+    staleTime: 1000 * 60 * 5, // 5-minute scholarly cache
   });
 
-  // 3. Save Segment Mutation
+  // 2. Save Segment Mutation
   const saveSegment = useMutation({
     mutationFn: async ({ ref, content }: { ref: string; content: string }) => {
-      if (!project?.id) {
-        throw new Error(
-          "No active translation project found to anchor this segment."
-        );
+      if (!resourceId || !user) {
+        throw new Error("Active project and session required for ingestion.");
       }
 
-      const { error: saveError } = await supabase
-        .from("translation_segments")
-        .upsert(
-          {
-            resource_id: project.id,
-            ref,
-            translated_content: content,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "resource_id,ref" }
-        );
+      const { error } = await supabase.from("translation_segments").upsert(
+        {
+          resource_id: resourceId,
+          ref,
+          text_content: content,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "resource_id,ref" }
+      );
 
-      // Resolved: 'saveError' is explicitly checked and handled
-      if (saveError) {
-        console.error(
-          "[TranslationEngine] Segment save failed:",
-          saveError.message
-        );
-        throw saveError;
+      if (error) {
+        console.error("[TranslationEngine] Persist failed:", error.message);
+        throw error;
       }
     },
     onSuccess: () => {
-      if (project?.id) {
-        queryClient.invalidateQueries({
-          queryKey: ["translation-segments", project.id],
-        });
-      }
+      // Refresh the work context to show success states (checkmarks)
+      queryClient.invalidateQueries({
+        queryKey: ["translation-work-segments", resourceId],
+      });
     },
   });
 
   return {
     segments: segments || [],
-    projectId: project?.id,
     isLoading,
     saveSegment,
+    // Progress calculation for the Studio Header
+    progress:
+      segments && segments.length > 0
+        ? Math.round(
+            (segments.filter((s) => !!s.translated_content).length /
+              segments.length) *
+              100
+          )
+        : 0,
   };
 };

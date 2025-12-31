@@ -29,7 +29,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    "components/reader/VirtualVerseList.tsx"
   ],
   "exclude": ["node_modules"]
 }

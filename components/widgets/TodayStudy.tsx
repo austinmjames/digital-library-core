@@ -11,16 +11,21 @@ import {
   Clock,
   Flame,
   Loader2,
+  Sparkles,
   Trophy,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 
+// Canvas Integration: Using the premium Skeleton component for ingestion states
+import { Skeleton } from "@/components/ui/Skeleton";
+
 /**
- * TodayStudy Component (v2.1 - Cleaned Types)
+ * TodayStudy Component (v2.2 - High Fidelity)
  * Filepath: components/widgets/TodayStudy.tsx
- * Role: The central "command center" for a user's daily study obligations.
- * Alignment: PRD Section 3.1 (Time Engine) & 2.4 (Gamification).
+ * Role: Daily briefing and study obligation command center.
+ * PRD Alignment: Section 3.1 (Time Engine) & 2.4 (Gamification).
+ * Fixes: Integrated Skeleton component, updated color tokens, and refined HUD typography.
  */
 
 interface Portion {
@@ -34,7 +39,6 @@ interface Portion {
   is_completed?: boolean;
 }
 
-// Utility type for raw database response before adding UI-state fields
 type RawPortion = Omit<Portion, "xp_value" | "is_completed">;
 
 interface TodayStudyProps {
@@ -49,22 +53,21 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
 
   const supabase = createClient();
 
-  // 1. Time Engine Logic: Determine the current period of the study day
   const timeContext = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12)
       return {
         label: "Morning (Shacharit)",
-        sub: "Focus on concentration and clarity.",
+        sub: "Concentration and clarity of mind.",
       };
     if (hour < 18)
       return {
         label: "Afternoon (Mincha)",
-        sub: "A moment of synthesis amidst the day.",
+        sub: "Synthesize the wisdom of the day.",
       };
     return {
       label: "Evening (Ma'ariv)",
-      sub: "Reflecting on the wisdom gathered.",
+      sub: "Reflecting on the gathered light.",
     };
   }, []);
 
@@ -73,10 +76,8 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
       try {
         setIsLoading(true);
         setErrorState(null);
-
         const today = new Date().toISOString().split("T")[0];
 
-        // Fetch real daily schedules
         const { data, error: supabaseError } = await supabase
           .from("daily_schedules")
           .select("*")
@@ -84,20 +85,17 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
 
         if (supabaseError) throw supabaseError;
 
-        // Map data and inject XP values/defaults while ensuring type safety
         const mappedPortions = ((data as RawPortion[]) || []).map(
           (p: RawPortion) => ({
             ...p,
             xp_value: p.type === "DAF_YOMI" ? 50 : 25,
-            is_completed: false, // Logic would eventually link to a user_progress table
+            is_completed: false,
           })
         );
 
         setPortions(mappedPortions as Portion[]);
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to sync calendar";
-        console.error("[TodayStudy] Sync error:", err);
+        const message = err instanceof Error ? err.message : "Temporal Desync";
         setErrorState(message);
       } finally {
         setIsLoading(false);
@@ -112,7 +110,7 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
     e.stopPropagation();
     setCompletingId(id);
 
-    // Simulate completion logic & XP award
+    // Simulation of PRD 2.4 XP Ingestion
     setTimeout(() => {
       setPortions((prev) =>
         prev.map((p) => (p.id === id ? { ...p, is_completed: true } : p))
@@ -121,34 +119,26 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
     }, 800);
   };
 
-  // UI Helpers
   const getPortionStyle = (type: string) => {
     switch (type) {
       case "DAF_YOMI":
         return {
           icon: Flame,
-          color: "text-orange-600",
-          bg: "bg-orange-50",
-          border: "hover:border-orange-200",
+          color: "text-amber-500", // Gold Signature
+          bg: "bg-amber-50",
+          border: "hover:border-amber-400/50",
         };
       case "PARASHAH":
         return {
           icon: BookOpen,
-          color: "text-blue-600",
-          bg: "bg-blue-50",
-          border: "hover:border-blue-200",
-        };
-      case "HALAKHAH":
-        return {
-          icon: Clock,
-          color: "text-emerald-600",
-          bg: "bg-emerald-50",
-          border: "hover:border-emerald-200",
+          color: "text-zinc-950", // Ink Signature
+          bg: "bg-zinc-50",
+          border: "hover:border-zinc-950/20",
         };
       default:
         return {
           icon: Calendar,
-          color: "text-zinc-600",
+          color: "text-zinc-400",
           bg: "bg-zinc-50",
           border: "hover:border-zinc-200",
         };
@@ -156,60 +146,76 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
   };
 
   return (
-    <div className={cn("space-y-8", className)}>
-      {/* Enhanced Header with Time Engine Context */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
-            <Calendar size={14} /> The Daily Briefing
+    <div className={cn("space-y-10", className)}>
+      {/* 1. Header Area */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1.5">
+          <h2 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.4em] flex items-center gap-2.5">
+            <Sparkles size={14} className="text-amber-500" /> Daily Briefing
           </h2>
-          <p className="text-xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
-            {timeContext.label}
+          <div className="flex items-center gap-4">
+            <p className="text-2xl font-black text-zinc-950 tracking-tight uppercase">
+              {timeContext.label}
+            </p>
             {isLoading && (
               <Loader2 size={16} className="animate-spin text-zinc-200" />
             )}
+          </div>
+          <p className="text-xs text-zinc-400 font-medium italic opacity-70">
+            {timeContext.sub}
           </p>
-          <p className="text-xs text-zinc-500 italic">{timeContext.sub}</p>
         </div>
 
         <Link
           href="/library/schedules"
-          className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest hover:text-orange-600 flex items-center gap-1.5 transition-colors"
+          className="text-[10px] font-black text-zinc-400 uppercase tracking-widest hover:text-zinc-950 flex items-center gap-2 transition-all group"
         >
-          View Full Cycle <ArrowUpRight size={12} />
+          Full Cycle{" "}
+          <ArrowUpRight
+            size={12}
+            className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
+          />
         </Link>
       </div>
 
-      {/* Main Portion Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* 2. Grid (Portion Cards) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {isLoading ? (
+          // Using the Canvas Skeleton primitive for high-fidelity loading
           Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-48 bg-zinc-50 border border-zinc-100 rounded-[2.5rem] animate-pulse"
-            />
+            <Skeleton key={i} variant="card" className="h-56" />
           ))
         ) : errorState ? (
-          <div className="col-span-full p-12 text-center bg-rose-50 border border-rose-100 rounded-[2.5rem] space-y-4">
-            <AlertCircle size={32} className="text-rose-500 mx-auto" />
+          <div className="col-span-full p-12 text-center bg-rose-50 border border-rose-100 rounded-[3rem] space-y-5 animate-in fade-in duration-500">
+            <AlertCircle
+              size={32}
+              className="text-rose-500 mx-auto"
+              strokeWidth={1.5}
+            />
             <div>
-              <p className="text-sm font-bold text-rose-900 uppercase tracking-widest">
-                Temporal Desync
+              <p className="text-[10px] font-black text-rose-950 uppercase tracking-[0.3em]">
+                Manuscript Desync
               </p>
-              <p className="text-xs text-rose-600 mt-1">{errorState}</p>
+              <p className="text-xs text-rose-400 mt-2 font-medium">
+                {errorState}
+              </p>
             </div>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-rose-600 text-white text-[10px] font-bold uppercase rounded-xl hover:bg-rose-700 transition-all"
+              className="px-8 py-3 bg-rose-950 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-900 transition-all active:scale-95"
             >
               Retry Sync
             </button>
           </div>
         ) : portions.length === 0 ? (
-          <div className="col-span-full py-20 text-center border-2 border-dashed border-zinc-100 rounded-[3rem] opacity-50 space-y-4">
-            <Clock size={40} className="mx-auto text-zinc-200" />
-            <p className="text-sm text-zinc-400 italic">
-              No specific portions identified for this date.
+          <div className="col-span-full py-24 text-center border-2 border-dashed border-zinc-100 rounded-[4rem] opacity-40 space-y-4">
+            <Clock
+              size={48}
+              className="mx-auto text-zinc-200"
+              strokeWidth={1}
+            />
+            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">
+              The Daily Scroll is Silent
             </p>
           </div>
         ) : (
@@ -222,45 +228,48 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
                 key={portion.id}
                 href={`/read/${portion.ref.replace(/\s+/g, ".")}`}
                 className={cn(
-                  "relative group bg-white p-7 rounded-[2.5rem] border border-zinc-100 shadow-sm transition-all overflow-hidden",
+                  "relative group bg-white p-8 rounded-[3rem] border border-zinc-100 shadow-sm transition-all duration-500 overflow-hidden",
                   style.border,
                   portion.is_completed
-                    ? "bg-zinc-50/50 grayscale-[0.5]"
-                    : "hover:shadow-2xl hover:-translate-y-1"
+                    ? "bg-zinc-50/50 grayscale-[0.8] opacity-60"
+                    : "hover:shadow-2xl hover:-translate-y-1.5"
                 )}
               >
-                {/* Visual Background Decoration */}
-                <Icon className="absolute -bottom-6 -right-6 w-24 h-24 text-zinc-50 opacity-20 group-hover:rotate-12 transition-transform duration-700" />
+                <Icon className="absolute -bottom-6 -right-6 w-28 h-28 text-zinc-50 opacity-10 group-hover:rotate-12 group-hover:scale-110 transition-all duration-700 pointer-events-none" />
 
-                <div className="relative z-10 space-y-6">
+                <div className="relative z-10 space-y-8">
                   <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-2 rounded-xl", style.bg)}>
-                        <Icon size={16} className={style.color} />
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "p-3 rounded-2xl transition-all shadow-sm group-hover:shadow-md",
+                          style.bg
+                        )}
+                      >
+                        <Icon size={18} className={style.color} />
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                      <span className="text-[9px] font-black text-zinc-300 uppercase tracking-[0.25em]">
                         {portion.type.replace("_", " ")}
                       </span>
                     </div>
 
-                    {/* Progress / Completion Toggle */}
                     <button
                       onClick={(e) => handleMarkComplete(e, portion.id)}
                       disabled={
                         portion.is_completed || completingId === portion.id
                       }
                       className={cn(
-                        "p-2 rounded-full transition-all",
+                        "p-2.5 rounded-full transition-all active:scale-95",
                         portion.is_completed
-                          ? "bg-emerald-50 text-emerald-600"
-                          : "bg-zinc-50 text-zinc-300 hover:bg-white hover:shadow-md hover:text-emerald-500"
+                          ? "bg-emerald-50 text-emerald-600 shadow-inner"
+                          : "bg-zinc-50 text-zinc-300 hover:bg-zinc-950 hover:text-white"
                       )}
                     >
                       {completingId === portion.id ? (
-                        <Loader2 className="animate-spin" size={16} />
+                        <Loader2 className="animate-spin" size={18} />
                       ) : (
                         <CheckCircle2
-                          size={16}
+                          size={18}
                           fill={portion.is_completed ? "currentColor" : "none"}
                         />
                       )}
@@ -268,31 +277,34 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
                   </div>
 
                   <div>
-                    <h3 className="text-xl font-bold text-zinc-900 group-hover:text-orange-600 transition-colors">
+                    <h3 className="text-2xl font-black text-zinc-950 tracking-tighter leading-tight uppercase group-hover:text-amber-500 transition-colors">
                       {portion.label || portion.ref}
                     </h3>
-                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter mt-1">
+                    <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em] mt-2">
                       {portion.ref}
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-6 border-t border-zinc-50">
-                    <p className="font-hebrew text-xl text-zinc-400" dir="rtl">
+                  <div className="flex items-center justify-between pt-8 border-t border-zinc-50">
+                    <p
+                      className="font-serif-hebrew text-2xl text-zinc-300 group-hover:text-zinc-500 transition-colors"
+                      dir="rtl"
+                    >
                       {portion.he_ref}
                     </p>
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[9px] font-bold uppercase">
-                      <Trophy size={10} />+{portion.xp_value} XP
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm border border-amber-100/50">
+                      <Trophy size={10} /> +{portion.xp_value} XP
                     </div>
                   </div>
                 </div>
 
-                {/* Progress Overlay */}
+                {/* Mastery Overlay */}
                 {portion.is_completed && (
-                  <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
-                    <div className="bg-white px-4 py-2 rounded-full shadow-xl border border-zinc-100 flex items-center gap-2 animate-in zoom-in-95 duration-300">
-                      <CheckCircle2 className="text-emerald-500" size={14} />
-                      <span className="text-[10px] font-bold text-zinc-900 uppercase tracking-widest">
-                        Complete
+                  <div className="absolute inset-0 bg-white/20 backdrop-blur-[1px] flex items-center justify-center animate-in fade-in duration-700">
+                    <div className="bg-zinc-950 px-6 py-3 rounded-full shadow-2xl border border-white/10 flex items-center gap-3 animate-in zoom-in-95 duration-500">
+                      <CheckCircle2 className="text-amber-500" size={16} />
+                      <span className="text-[10px] font-black text-white uppercase tracking-[0.3em]">
+                        Mastered
                       </span>
                     </div>
                   </div>
@@ -303,28 +315,33 @@ export const TodayStudy: React.FC<TodayStudyProps> = ({ className }) => {
         )}
       </div>
 
-      {/* Summary Footer */}
-      <div className="bg-zinc-900 p-8 rounded-[2.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-            <Trophy size={24} />
+      {/* 3. Summary Pulse */}
+      <div className="bg-zinc-950 p-10 rounded-[3rem] text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-[60px] -mr-16 -mt-16 pointer-events-none" />
+
+        <div className="flex items-center gap-6 relative z-10">
+          <div className="w-16 h-16 bg-amber-500 rounded-[1.5rem] flex items-center justify-center shadow-xl group-hover:rotate-6 transition-transform">
+            <Trophy size={32} className="text-zinc-950" />
           </div>
-          <div>
-            <p className="text-sm font-bold">Daily Goal Progress</p>
-            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+          <div className="space-y-1">
+            <p className="text-lg font-black uppercase tracking-tight">
+              Daily Progress
+            </p>
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em]">
               {portions.filter((p) => p.is_completed).length} /{" "}
-              {portions.length} Portions Mastered Today
+              {portions.length} Portion Fragments Mastered
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex gap-2 relative z-10">
           {portions.map((p, i) => (
             <div
               key={i}
               className={cn(
-                "h-1.5 w-8 rounded-full transition-all duration-500",
+                "h-2 w-10 rounded-full transition-all duration-700",
                 p.is_completed
-                  ? "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+                  ? "bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
                   : "bg-zinc-800"
               )}
             />

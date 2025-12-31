@@ -1,155 +1,148 @@
-// Filepath: src/components/reader/ContextPanel.tsx
+"use client";
 
-import { CommentaryData, ReaderContext, Verse } from "@/lib/types/reader";
-import { MessageSquare, NotebookPen, Sparkles, X } from "lucide-react";
-import React, { useState } from "react";
+import { cn } from "@/lib/utils/utils";
+import {
+  Database,
+  Hash,
+  MessageSquare,
+  PenLine,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { useState } from "react";
 
-// --- Mock Data (Ideally fetched via React Query in a real app) ---
-const MOCK_COMMENTARY: CommentaryData = {
-  global: [
-    {
-      id: 1,
-      author: "Rashi",
-      text: 'In the beginning: Said Rabbi Isaac: The Torah need not have started here, but from "This month shall be unto you..."',
-    },
-    {
-      id: 2,
-      author: "Ramban",
-      text: "The act of creation is a deep mystery, hidden in the foundation of the world.",
-    },
-  ],
-  dafyomi: [
-    {
-      id: 3,
-      author: "Rav Cohen",
-      text: "Notice how the creation of light precedes the creation of the luminaries. This is a spiritual light.",
-    },
-    {
-      id: 4,
-      author: "Sarah (Mod)",
-      text: 'Reminder: We are discussing the philosophical implications of "Tohu vaVohu" on Zoom at 8pm.',
-    },
-  ],
-  private: [
-    {
-      id: 5,
-      author: "My Notes",
-      text: "Idea for sermon: Chaos precedes order. The darkness is a canvas, not an enemy.",
-    },
-  ],
-};
+// Sub-component imports
+import { useAuth } from "@/lib/hooks/useAuth";
+import { ReaderContext } from "@/lib/hooks/useReaderSettings";
+import { Verse } from "@/types/reader";
+import { AITab } from "./AITab";
+import { DiscussionTab } from "./DiscussionTab";
+import { NotesTab } from "./NotesTab";
+import { ResourceTab } from "./ResourceTab";
 
-type PanelTab = "discuss" | "notes" | "ai";
+/**
+ * ContextPanel (v3.4)
+ * Filepath: components/reader/ContextPanel.tsx
+ * Role: Unified scholarly interface for AI, Notes, Resources, and Community.
+ * PRD Alignment: Section 3.2 (Contextual Metadata) & 5.0 (Monetization).
+ */
 
 interface ContextPanelProps {
-  isOpen: boolean;
   activeVerse: Verse | null;
   onClose: () => void;
   context: ReaderContext;
+  isOpen?: boolean;
 }
 
-export const ContextPanel: React.FC<ContextPanelProps> = ({
-  isOpen,
+type TabID = "resources" | "notes" | "ai" | "community";
+
+export const ContextPanel = ({
   activeVerse,
   onClose,
   context,
-}) => {
-  const [activeTab, setActiveTab] = useState<PanelTab>("discuss");
+}: ContextPanelProps) => {
+  const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabID>("resources");
 
-  // Filter commentary based on context
-  const comments = MOCK_COMMENTARY[context] || [];
+  if (!activeVerse) return null;
 
-  if (!isOpen) return null;
+  const isPro = profile?.tier === "pro";
+
+  const tabs = [
+    { id: "resources", label: "Sources", icon: Database },
+    { id: "ai", label: "Insights", icon: Sparkles, premium: true },
+    { id: "notes", label: "My Notes", icon: PenLine },
+    { id: "community", label: "Discussion", icon: MessageSquare },
+  ];
 
   return (
-    <aside className="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-50 border-l border-zinc-200 transform transition-transform duration-300 ease-in-out flex flex-col">
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-100">
-        {(["discuss", "notes", "ai"] as PanelTab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`
-                flex-1 py-4 flex flex-col items-center gap-1 transition-all relative
-                ${
-                  activeTab === tab
-                    ? "text-orange-600 bg-orange-50/30"
-                    : "text-zinc-400 hover:text-zinc-600"
-                }
-              `}
-          >
-            {tab === "discuss" && <MessageSquare size={16} />}
-            {tab === "notes" && <NotebookPen size={16} />}
-            {tab === "ai" && <Sparkles size={16} />}
-            <span className="text-[9px] font-bold uppercase tracking-widest">
-              {tab}
+    <aside className="w-[420px] h-full bg-white border-l border-zinc-100 flex flex-col shadow-2xl animate-in slide-in-from-right duration-500 z-40">
+      {/* 1. Panel Header (Active Verse Context) */}
+      <header className="p-8 bg-zinc-950 text-white space-y-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-[50px] -mr-16 -mt-16 pointer-events-none" />
+
+        <div className="flex items-center justify-between relative z-10">
+          <div className="flex items-center gap-2">
+            <Hash size={14} className="text-amber-500" />
+            <span className="text-[10px] font-black uppercase tracking-[0.4em]">
+              {activeVerse.ref}
             </span>
-            {activeTab === tab && (
-              <div className="absolute bottom-0 w-full h-0.5 bg-orange-500" />
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="relative z-10">
+          <p
+            className="font-serif-hebrew text-3xl leading-relaxed text-zinc-100 text-right"
+            dir="rtl"
+          >
+            {activeVerse.he}
+          </p>
+          <p className="text-xs text-zinc-500 mt-4 line-clamp-2 italic font-serif leading-relaxed">
+            {activeVerse.en}
+          </p>
+        </div>
+      </header>
+
+      {/* 2. Tab Navigation */}
+      <nav className="flex items-center justify-around border-b border-zinc-50 px-4 bg-zinc-50/50">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as TabID)}
+            className={cn(
+              "flex flex-col items-center gap-2 py-5 px-2 transition-all relative min-w-[80px] group",
+              activeTab === tab.id
+                ? "text-zinc-950"
+                : "text-zinc-300 hover:text-zinc-500"
+            )}
+          >
+            <div className="relative">
+              <tab.icon
+                size={20}
+                strokeWidth={activeTab === tab.id ? 2.5 : 1.5}
+              />
+              {tab.premium && !isPro && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white shadow-sm" />
+              )}
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-[0.15em]">
+              {tab.label}
+            </span>
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-amber-500 rounded-full" />
             )}
           </button>
         ))}
-      </div>
+      </nav>
 
-      <div className="h-12 border-b border-zinc-100 flex items-center justify-between px-4 bg-zinc-50">
-        <h3 className="font-bold text-xs text-zinc-500 uppercase tracking-wider">
-          {activeVerse ? activeVerse.ref : "Select Verse"}
-        </h3>
-        <button
-          onClick={onClose}
-          className="p-1 hover:bg-zinc-200 rounded text-zinc-500"
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 bg-zinc-50/50">
-        {!activeVerse ? (
-          <div className="text-center text-zinc-400 mt-20">
-            <p>Select a verse to see {context} context.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Context Badge */}
-            <div className="flex justify-center mb-4">
-              <span className="bg-zinc-200 text-zinc-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                Showing: {context}
-              </span>
-            </div>
-
-            {comments.map((comment) => (
-              <div
-                key={comment.id}
-                className="bg-white p-4 rounded-lg shadow-sm border border-zinc-100"
-              >
-                <h4 className="font-bold text-sm text-zinc-800 mb-2 border-b border-zinc-50 pb-2 flex justify-between">
-                  {comment.author}
-                  <span className="text-[10px] text-zinc-400 font-normal">
-                    2m ago
-                  </span>
-                </h4>
-                <p className="text-sm text-zinc-600 font-serif leading-relaxed">
-                  {comment.text}
-                </p>
-              </div>
-            ))}
-
-            {comments.length === 0 && (
-              <div className="text-center p-8 text-zinc-400">
-                <p>No comments in this context yet.</p>
-              </div>
-            )}
-          </div>
+      {/* 3. Tab Content Area */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+        {activeTab === "resources" && <ResourceTab />}
+        {activeTab === "notes" && <NotesTab activeVerse={activeVerse} />}
+        {activeTab === "community" && (
+          <DiscussionTab activeVerse={activeVerse} context={context} />
+        )}
+        {activeTab === "ai" && (
+          <AITab activeVerse={activeVerse} isPro={isPro} />
         )}
       </div>
 
-      <div className="p-4 border-t border-zinc-200 bg-white">
-        <input
-          type="text"
-          placeholder={`Reply to ${context}...`}
-          className="w-full bg-zinc-100 border-none rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-        />
-      </div>
+      {/* 4. Footer Identity */}
+      <footer className="p-5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between">
+        <p className="text-[9px] text-zinc-400 uppercase tracking-widest font-black">
+          Engine v3.4
+        </p>
+        <div className="flex gap-1.5">
+          <div className="w-1 h-1 rounded-full bg-emerald-500" />
+          <div className="w-1 h-1 rounded-full bg-emerald-500/20" />
+        </div>
+      </footer>
     </aside>
   );
 };

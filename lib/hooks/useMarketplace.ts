@@ -2,10 +2,11 @@ import { createClient } from "@/lib/supabase/client";
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
 
 /**
- * useMarketplace Hook (v1.1 - Strict Types & Mapping Fix)
+ * useMarketplace Hook (v2.0)
  * Filepath: lib/hooks/useMarketplace.ts
- * Role: Fetches public translations and notebooks for the community market.
- * Alignment: PRD Section 2.2 (Library & Marketplace).
+ * Role: Discovery engine for community-published scholarship.
+ * PRD Alignment: Section 2.2 (Marketplace) & 5.0 (Tier Identity).
+ * Migration Sync: Aligns with public.user_resources schema.
  */
 
 export interface MarketplaceItem {
@@ -15,95 +16,91 @@ export interface MarketplaceItem {
   description: string | null;
   author_name: string;
   author_username: string;
-  adds_count: number;
+  author_tier: "free" | "pro"; // Added for Chaver visibility
   created_at: string;
-  ref_anchor?: string;
+  target_book_id?: string; // Anchor for the Infinite Text engine
 }
 
 /**
- * Interface representing the raw join response from Supabase.
- * Resolves the array-vs-object ambiguity in relational selects.
+ * Internal interface for Supabase join response
  */
-interface RawMarketplaceRow {
+interface RawResourceRow {
   id: string;
   type: "TRANSLATION" | "NOTEBOOK";
   title: string;
   description: string | null;
-  adds_count: number;
   created_at: string;
-  ref_anchor?: string;
-  users:
-    | {
-        display_name: string | null;
-        username: string;
-      }
-    | {
-        display_name: string | null;
-        username: string;
-      }[];
+  target_book_id: string | null;
+  users: {
+    display_name: string | null;
+    username: string | null;
+    tier: "free" | "pro";
+  };
 }
 
 export function useMarketplace(
   filter: "ALL" | "TRANSLATION" | "NOTEBOOK" = "ALL",
-  sortBy: "trending" | "newest" = "trending"
+  sortBy: "trending" | "newest" = "newest"
 ): UseQueryResult<MarketplaceItem[], Error> {
   const supabase = createClient();
 
   return useQuery<MarketplaceItem[], Error>({
     queryKey: ["marketplace", filter, sortBy],
     queryFn: async (): Promise<MarketplaceItem[]> => {
-      let query = supabase.from("marketplace_items").select(`
+      // Logic Fix: Query 'user_resources' where is_public = true (Source of Truth)
+      let query = supabase
+        .from("user_resources")
+        .select(
+          `
           id,
           type,
           title,
           description,
-          adds_count,
           created_at,
-          ref_anchor,
+          target_book_id,
           users (
             display_name,
-            username
+            username,
+            tier
           )
-        `);
+        `
+        )
+        .eq("is_public", true);
 
+      // Apply Filters
       if (filter !== "ALL") {
         query = query.eq("type", filter);
       }
 
-      if (sortBy === "trending") {
-        query = query.order("adds_count", { ascending: false });
-      } else {
+      // Apply Sorting (Trending logic currently uses 'updated_at' until view is defined)
+      if (sortBy === "newest" || sortBy === "trending") {
         query = query.order("created_at", { ascending: false });
       }
 
-      const { data, error } = await query.limit(50);
+      const { data, error } = await query.limit(40);
 
       if (error) throw error;
 
-      // Type-safe mapping to resolve 'username' property access on potential arrays
-      return ((data as unknown as RawMarketplaceRow[]) || []).map((item) => {
-        // Resolve the join: Supabase might return an array or object depending on schema config
-        const userNode = Array.isArray(item.users) ? item.users[0] : item.users;
-
-        return {
-          id: item.id,
-          type: item.type,
-          title: item.title,
-          description: item.description,
-          author_name: userNode?.display_name || "Anonymous Scholar",
-          author_username: userNode?.username || "anonymous",
-          adds_count: item.adds_count,
-          created_at: item.created_at,
-          ref_anchor: item.ref_anchor,
-        };
-      });
+      // Type-safe mapping for the scholarly marketplace
+      return ((data as unknown as RawResourceRow[]) || []).map((item) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        description: item.description,
+        author_name: item.users?.display_name || "Anonymous Scholar",
+        author_username: item.users?.username || "anonymous",
+        author_tier: item.users?.tier || "free",
+        created_at: item.created_at,
+        target_book_id: item.target_book_id || undefined,
+      }));
     },
-    staleTime: 1000 * 60 * 5, // 5 minute cache for market data
+    staleTime: 1000 * 60 * 5, // 5 minute marketplace cache
   });
 }
 
 /**
- * Secondary Hook: Fetch single marketplace item details
+ * useMarketItem
+ * Role: Fetches specific metadata for the Marketplace Detail View.
  */
 export function useMarketItem(
   id: string
@@ -115,19 +112,19 @@ export function useMarketItem(
     enabled: !!id,
     queryFn: async (): Promise<MarketplaceItem> => {
       const { data, error } = await supabase
-        .from("marketplace_items")
+        .from("user_resources")
         .select(
           `
           id,
           type,
           title,
           description,
-          adds_count,
           created_at,
-          ref_anchor,
+          target_book_id,
           users (
             display_name,
-            username
+            username,
+            tier
           )
         `
         )
@@ -136,19 +133,18 @@ export function useMarketItem(
 
       if (error) throw error;
 
-      const item = data as unknown as RawMarketplaceRow;
-      const userNode = Array.isArray(item.users) ? item.users[0] : item.users;
+      const item = data as unknown as RawResourceRow;
 
       return {
         id: item.id,
         type: item.type,
         title: item.title,
         description: item.description,
-        author_name: userNode?.display_name || "Anonymous Scholar",
-        author_username: userNode?.username || "anonymous",
-        adds_count: item.adds_count,
+        author_name: item.users?.display_name || "Anonymous Scholar",
+        author_username: item.users?.username || "anonymous",
+        author_tier: item.users?.tier || "free",
         created_at: item.created_at,
-        ref_anchor: item.ref_anchor,
+        target_book_id: item.target_book_id || undefined,
       };
     },
   });
