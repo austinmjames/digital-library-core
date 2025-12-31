@@ -1,12 +1,17 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 /**
- * DrashX Supabase Browser Client
- * Role: Used for authentication and real-time features within Client Components.
+ * Supabase Browser Client Factory (v2.1 - Build Safe)
+ * Filepath: lib/supabase/client.ts
+ * Role: Provides a Supabase client for Client Components.
  */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn("Client-side Supabase keys are missing.");
+  }
+
+  return createBrowserClient(supabaseUrl || "", supabaseKey || "");
 }
