@@ -3,17 +3,17 @@ import { createClient } from "@/lib/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 /**
- * useSearch Hook (v2.4 - Schema Aligned)
+ * useSearch Hook (v2.5 - Type Alignment)
  * Filepath: lib/hooks/useSearch.ts
- * Role: Central discovery engine combining Keyword (Catalog) and Vector (Verse) search.
- * Fix: Aligned SearchResult interface with UI expectations (slug, category).
+ * Role: Central discovery engine combining Keyword and Vector search.
+ * Fix: Standardized SearchResult interface to ensure slug and category are present.
  */
 
 export interface SearchResult {
   id: string;
   ref: string;
-  slug?: string;
-  category?: string;
+  slug: string; // Mandatory for routing
+  category: string; // Mandatory for UI labeling
   en_title?: string;
   he_title?: string;
   hebrew_text?: string;
@@ -46,7 +46,7 @@ export function useSearch(query: string, categoryFilter: string = "All") {
     queryKey: ["hybrid-search", query, categoryFilter, isPro],
     enabled: query.length >= 3,
     queryFn: async (): Promise<SearchResult[]> => {
-      // 1. Catalog Search (Books)
+      // 1. Catalog Search
       let catalogQuery = supabase
         .schema("library")
         .from("books")
@@ -60,9 +60,9 @@ export function useSearch(query: string, categoryFilter: string = "All") {
         );
       }
 
-      const catalogDataPromise = catalogQuery.limit(5);
+      const { data: catalogData } = await catalogQuery.limit(5);
 
-      // 2. Deep Search (Verse level)
+      // 2. Deep Search
       let deepResults: SearchResult[] = [];
 
       if (isPro) {
@@ -78,8 +78,11 @@ export function useSearch(query: string, categoryFilter: string = "All") {
         });
 
         if (!error && data) {
+          // Narrowing the response to valid SearchResults
           deepResults = (data as unknown as DeepSearchResult[]).map((v) => ({
             ...v,
+            slug: v.ref,
+            category: "Verse",
             type: "verse" as const,
           }));
         }
@@ -94,12 +97,12 @@ export function useSearch(query: string, categoryFilter: string = "All") {
         if (!error && data) {
           deepResults = (data as unknown as DeepSearchResult[]).map((v) => ({
             ...v,
+            slug: v.ref,
+            category: "Verse",
             type: "verse" as const,
           }));
         }
       }
-
-      const { data: catalogData } = await catalogDataPromise;
 
       const formattedCatalog: SearchResult[] = (
         (catalogData as unknown as CatalogBook[]) || []

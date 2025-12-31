@@ -14,22 +14,21 @@ import Link from "next/link";
 import { useState } from "react";
 
 /**
- * Search Orchestrator (v2.2 - Clean Build)
+ * Search Orchestrator (v2.3 - Clean Interface)
  * Filepath: app/library/search/page.tsx
- * Role: Central discovery hub for the DrashX library.
- * Fix: Removed unused 'SearchResult' import to resolve Vercel/Turbopack linting errors.
+ * Fix: Removed local SearchResult interface and manual casting to resolve Vercel build errors.
+ * Logic: Relies purely on inferred types from the useSearch hook.
  */
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
 
-  // Results type is automatically inferred from the useSearch hook return type
+  // 'results' is correctly typed as SearchResult[] | undefined by the hook
   const { data: results, isLoading } = useSearch(query, category);
 
   return (
     <div className="max-w-5xl mx-auto p-8 pt-16 space-y-12">
-      {/* Search Header */}
       <div className="space-y-6">
         <h1 className="text-4xl font-black text-zinc-900 tracking-tighter uppercase italic">
           Discovery
@@ -65,7 +64,6 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* Results Section */}
       <div className="space-y-6">
         <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
           <div className="flex items-center gap-2 text-zinc-400">
@@ -120,11 +118,9 @@ export default function SearchPage() {
                               ? result.en_title
                               : result.ref}
                           </span>
-                          {result.category && (
-                            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2 py-0.5 bg-zinc-100 rounded">
-                              {result.category}
-                            </span>
-                          )}
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2 py-0.5 bg-zinc-100 rounded">
+                            {result.category}
+                          </span>
                         </div>
                         <p className="text-sm text-zinc-500 line-clamp-1 font-serif">
                           {result.type === "book"
