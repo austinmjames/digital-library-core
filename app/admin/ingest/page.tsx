@@ -24,11 +24,11 @@ import { useMemo, useState } from "react";
 import sefariaRegistry from "@/lib/etl/sefaria_structured_index.json";
 
 /**
- * Ingest Orchestrator (v3.1 - Type Safe)
+ * Ingest Orchestrator (v3.3 - Optimized)
  * Filepath: app/admin/ingest/page.tsx
  * Role: Advanced admin tool to browse and sync manuscripts from Sefaria.
  * PRD Alignment: Section 3.1 (Reliability & Performance).
- * Fixes: Resolved unused imports, missing icons, and 'any' type warnings.
+ * Fixes: Removed unused 'GroupedFolder' interface to resolve linting errors.
  */
 
 interface Manuscript {
@@ -73,21 +73,39 @@ export default function IngestPage() {
     status: "idle",
   });
 
-  // 1. Data Processing: Grouping the registry by "Parent Folder" (The Book level)
-  const bookFolders = useMemo(() => {
-    const folders = new Map<string, Manuscript[]>();
+  // 1. Tiered Performance Logic:
+  // Step A: Group the entire registry ONCE on mount.
+  const groupedRegistry = useMemo(() => {
     const registry = sefariaRegistry as unknown as RegistryData;
+    const foldersMap = new Map<string, Manuscript[]>();
     const index = registry.index || [];
 
+    // Efficient O(N) pass with single reference pushes
     index.forEach((item: Manuscript) => {
-      const existing = folders.get(item.parentFolder) || [];
-      folders.set(item.parentFolder, [...existing, item]);
+      if (!foldersMap.has(item.parentFolder)) {
+        foldersMap.set(item.parentFolder, []);
+      }
+      foldersMap.get(item.parentFolder)!.push(item);
     });
 
-    return Array.from(folders.entries())
-      .map(([path, versions]) => ({ path, versions }))
-      .filter((f) => f.path.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [searchQuery]);
+    return Array.from(foldersMap.entries()).map(([path, versions]) => ({
+      path,
+      versions,
+    }));
+  }, []); // Static dependency - run once
+
+  // Step B: Filter the pre-grouped list based on user search query.
+  const bookFolders = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    const filtered = groupedRegistry.filter(
+      (f) =>
+        f.path.toLowerCase().includes(query) ||
+        f.versions[0]?.book.toLowerCase().includes(query)
+    );
+
+    // Performance Guard: Limit visible DOM nodes to top 100 results
+    return filtered.slice(0, 100);
+  }, [groupedRegistry, searchQuery]);
 
   const addLog = (msg: string) =>
     setLog((prev) =>
@@ -249,10 +267,15 @@ export default function IngestPage() {
           </div>
 
           <div className="bg-white border border-zinc-100 rounded-[2.5rem] overflow-hidden shadow-sm h-[600px] flex flex-col">
-            <div className="p-6 bg-zinc-50 border-b border-zinc-100">
+            <div className="p-6 bg-zinc-50 border-b border-zinc-100 flex items-center justify-between">
               <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
                 <FolderOpen size={14} /> Sefaria Mirror Path
               </h3>
+              <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">
+                {searchQuery
+                  ? `${bookFolders.length} Matches`
+                  : `Top ${bookFolders.length}`}
+              </span>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
               {bookFolders.map((folder) => (
@@ -292,6 +315,13 @@ export default function IngestPage() {
                   </p>
                 </button>
               ))}
+              {bookFolders.length === 0 && (
+                <div className="py-20 text-center text-zinc-300">
+                  <p className="text-[10px] font-black uppercase tracking-widest">
+                    No matching manuscripts
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -316,7 +346,7 @@ export default function IngestPage() {
                       Source (Hebrew)
                     </label>
                     <div className="grid gap-2">
-                      {bookFolders
+                      {groupedRegistry
                         .find((f) => f.path === selectedParentFolder)
                         ?.versions.filter((v) => v.language === "Hebrew")
                         .map((v) => (
@@ -347,7 +377,7 @@ export default function IngestPage() {
                       Translation (English)
                     </label>
                     <div className="grid gap-2">
-                      {bookFolders
+                      {groupedRegistry
                         .find((f) => f.path === selectedParentFolder)
                         ?.versions.filter((v) => v.language === "English")
                         .map((v) => (
