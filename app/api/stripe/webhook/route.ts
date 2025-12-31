@@ -1,126 +1,104 @@
-import { stripe } from "@/lib/stripe/client";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 /**
- * Stripe Webhook Handler (DrashX Edition)
+ * Stripe Webhook Orchestrator (v2.3 - Version Sync)
  * Filepath: app/api/stripe/webhook/route.ts
- * Role: Manages the transition between 'Talmid' (Free) and 'Chaver' (Pro) tiers.
- * PRD Alignment: Section 5 (Monetization) & Section 2.1 (Social Identity/Notifications).
+ * Role: Handles asynchronous payment events from Stripe.
+ * Fix: Synchronized apiVersion string with the expected SDK type definition.
  */
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+// Helper to initialize Stripe lazily
+const getStripe = () => {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error(
+      "STRIPE_SECRET_KEY is not defined in environment variables."
+    );
+  }
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+  return new Stripe(key, {
+    // Updated to match the expected SDK version type
+    apiVersion: "2025-12-15.clover",
+    typescript: true,
+  });
+};
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const headerList = await headers();
-  const signature = headerList.get("stripe-signature");
+  const headersList = await headers();
+  const signature = headersList.get("stripe-signature");
 
-  if (!signature) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!signature || !webhookSecret) {
+    return new Response("Missing signature or webhook secret", { status: 400 });
   }
 
   let event: Stripe.Event;
 
   try {
+    const stripe = getStripe();
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: `Webhook Error: ${message}` },
-      { status: 400 }
-    );
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Webhook signature verification failed";
+    console.error(`❌ Webhook Error: ${message}`);
+    return new Response(`Webhook Error: ${message}`, { status: 400 });
   }
 
-  // 1. Initial Upgrade Logic
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const userId = session.metadata?.supabase_user_id;
-    const customerId = session.customer as string;
+  const supabase = await createClient();
 
-    if (userId) {
-      await supabaseAdmin
+  // Handle specific event types
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.metadata?.userId;
+
+      if (userId) {
+        // PRD 5.0: Upgrade user to 'pro' tier in public.users table
+        const { error } = await supabase
+          .from("users")
+          .update({
+            tier: "pro",
+            stripe_customer_id: session.customer as string,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
+
+        if (error) {
+          console.error(`❌ DB Sync Error for user ${userId}:`, error.message);
+        } else {
+          console.log(`✅ User ${userId} upgraded to PRO tier.`);
+        }
+      }
+      break;
+    }
+
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as Stripe.Subscription;
+      // Revert user to 'free' tier upon cancellation
+      await supabase
         .from("users")
-        .update({
-          tier: "pro",
-          stripe_customer_id: customerId,
-        })
-        .eq("id", userId);
+        .update({ tier: "free" })
+        .eq("stripe_customer_id", subscription.customer as string);
 
-      // Create System Notification (PRD 2.1)
-      await supabaseAdmin.from("notifications").insert({
-        user_id: userId,
-        type: "SYSTEM",
-        payload: {
-          title: "Tier Upgraded",
-          message:
-            "Welcome to the Chaver (Pro) tier. Custom avatars are now unlocked.",
-          icon: "Trophy",
-        },
-      });
+      console.log(
+        `ℹ️ Subscription for customer ${subscription.customer} terminated.`
+      );
+      break;
     }
-  }
 
-  // 2. Subscription Sync Logic (Renewals / Status Changes)
-  if (event.type === "customer.subscription.updated") {
-    const subscription = event.data.object as Stripe.Subscription;
-    const customerId = subscription.customer as string;
-    const status = subscription.status;
-    const isPro = status === "active" || status === "trialing";
-
-    const { data: user } = await supabaseAdmin
-      .from("users")
-      .update({ tier: isPro ? "pro" : "free" })
-      .eq("stripe_customer_id", customerId)
-      .select("id")
-      .single();
-
-    if (!isPro && user) {
-      // Notify user of tier revert
-      await supabaseAdmin.from("notifications").insert({
-        user_id: user.id,
-        type: "SYSTEM",
-        payload: {
-          title: "Subscription Updated",
-          message:
-            "Your Pro status has expired. Reverting to Talmid (Free) tier.",
-          icon: "AlertCircle",
-        },
-      });
-    }
-  }
-
-  // 3. Payment Failure Alert
-  if (event.type === "invoice.payment_failed") {
-    const invoice = event.data.object as Stripe.Invoice;
-    const customerId = invoice.customer as string;
-
-    const { data: user } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("stripe_customer_id", customerId)
-      .single();
-
-    if (user) {
-      await supabaseAdmin.from("notifications").insert({
-        user_id: user.id,
-        type: "SYSTEM",
-        payload: {
-          title: "Payment Action Required",
-          message:
-            "We encountered an issue with your last payment. Please update your billing info to maintain Pro access.",
-          icon: "CreditCard",
-        },
-      });
-    }
+    default:
+      console.log(`🟡 Unhandled event type ${event.type}`);
   }
 
   return NextResponse.json({ received: true });
 }
+
+// Ensure Next.js treats this as a dynamic route
+export const dynamic = "force-dynamic";
