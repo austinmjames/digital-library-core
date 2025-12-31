@@ -1,10 +1,12 @@
 /**
- * Sefaria Path Crawler (v3.4 - Dual-Register Discovery)
+ * Sefaria Path Crawler (v3.5 - CI/Vercel Optimized)
  * Filepath: scripts/crawl_sefaria_paths.js
  * Role: Discovers 'merged.json' files and tracks folder-level checkpoints.
  * Outputs:
  * - lib/etl/sefaria_structured_index.json (The Manuscript Catalogue)
  * - lib/etl/sefaria_full_directory.json (The Checkpoint Register)
+ * Note: Designed for local discovery or CI build steps.
+ * Vercel deployment requires GITHUB_PAT to be set in environment variables.
  */
 
 import axios from "axios";
@@ -17,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- Environment Configuration ---
+// Load from .env.local locally; Vercel will provide these via Dashboard vars
 const envLocalPath = path.join(__dirname, "../.env.local");
 if (fs.existsSync(envLocalPath)) {
   dotenv.config({ path: envLocalPath });
@@ -33,13 +36,14 @@ const GITHUB_API = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/cont
 const RAW_BASE_URL =
   "https://raw.githubusercontent.com/Sefaria/Sefaria-Export/master";
 
+const ETL_DIR = path.join(__dirname, "../lib/etl");
 const DIRECTORY_CHECKPOINT_PATH = path.join(
-  __dirname,
-  "../lib/etl/sefaria_full_directory.json"
+  ETL_DIR,
+  "sefaria_full_directory.json"
 );
 const STRUCTURED_INDEX_PATH = path.join(
-  __dirname,
-  "../lib/etl/sefaria_structured_index.json"
+  ETL_DIR,
+  "sefaria_structured_index.json"
 );
 
 const HEADERS = {
@@ -62,15 +66,20 @@ let manuscriptIndex = {
 };
 
 /**
- * Utility: Safe JSON loader
+ * Utility: Enforce Directory & Load State
  */
-function loadPersistedState() {
+function initializeEnvironment() {
+  if (!fs.existsSync(ETL_DIR)) {
+    fs.mkdirSync(ETL_DIR, { recursive: true });
+    console.log("[Init] Created ETL directory structure.");
+  }
+
   if (fs.existsSync(DIRECTORY_CHECKPOINT_PATH)) {
     try {
       const data = fs.readFileSync(DIRECTORY_CHECKPOINT_PATH, "utf8");
       checkpointState = JSON.parse(data);
     } catch {
-      console.warn("[Init] Checkpoint file corrupt. Starting fresh.");
+      console.warn("[Init] Checkpoint file corrupt. Resetting.");
     }
   }
 
@@ -79,7 +88,7 @@ function loadPersistedState() {
       const data = fs.readFileSync(STRUCTURED_INDEX_PATH, "utf8");
       manuscriptIndex = JSON.parse(data);
     } catch {
-      console.warn("[Init] Index file corrupt.");
+      console.warn("[Init] Index file corrupt. Resetting.");
     }
   }
 }
@@ -88,9 +97,6 @@ function loadPersistedState() {
  * Utility: Unified Disk Persistence
  */
 function persist() {
-  const dir = path.dirname(DIRECTORY_CHECKPOINT_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
   checkpointState.last_sync = new Date().toISOString();
   manuscriptIndex.total_count = manuscriptIndex.index.length;
 
@@ -113,8 +119,8 @@ function parseManuscript(fullPath) {
   // Remove 'json' and 'merged.json'
   const segments = parts.slice(1, -1);
 
-  const language = segments.pop();
-  const book = segments[segments.length - 1];
+  const language = segments.pop() || "Unknown";
+  const book = segments[segments.length - 1] || "Unknown";
   const categories = segments.slice(0, -1);
 
   return {
@@ -128,7 +134,8 @@ function parseManuscript(fullPath) {
 
 async function getContents(dirPath) {
   try {
-    await wait(150); // Throttle to protect secondary rate limits
+    // Throttling to prevent secondary rate limits during deep traversal
+    await wait(200);
     const response = await axios.get(`${GITHUB_API}/${dirPath}`, {
       headers: HEADERS,
     });
@@ -136,12 +143,12 @@ async function getContents(dirPath) {
   } catch (error) {
     if (error.response?.status === 403) {
       const resetTime = error.response.headers["x-ratelimit-reset"];
-      console.error(
-        `\n🛑 RATE LIMIT EXCEEDED. Resets at: ${new Date(
-          resetTime * 1000
-        ).toLocaleTimeString()}`
-      );
-      process.exit(1);
+      const dateStr = resetTime
+        ? new Date(resetTime * 1000).toLocaleTimeString()
+        : "unknown";
+      console.error(`\n🛑 RATE LIMIT EXCEEDED. Resets at: ${dateStr}`);
+      // In a CI environment, we want to fail the build if we can't get data
+      if (process.env.VERCEL) process.exit(1);
     }
     console.error(`❌ Fetch failed for ${dirPath}:`, error.message);
     return null;
@@ -152,7 +159,6 @@ async function getContents(dirPath) {
  * Recursive Discovery Loop
  */
 async function crawl(currentPath) {
-  // Checkpoint Skip: If this folder and all children are marked done
   if (checkpointState.completed_dirs.includes(currentPath)) {
     return;
   }
@@ -166,10 +172,8 @@ async function crawl(currentPath) {
     if (item.type === "dir") {
       await crawl(item.path);
     } else if (item.name === "merged.json") {
-      // Logic: Only search for paths including "merged.json"
       const manuscriptMeta = parseManuscript(item.path);
 
-      // Prevent duplicates in index
       const exists = manuscriptIndex.index.some(
         (m) => m.githubPath === item.path
       );
@@ -183,7 +187,6 @@ async function crawl(currentPath) {
     }
   }
 
-  // Once all items in this directory are processed, mark directory as complete
   if (!checkpointState.completed_dirs.includes(currentPath)) {
     checkpointState.completed_dirs.push(currentPath);
     persist();
@@ -194,16 +197,16 @@ async function crawl(currentPath) {
 async function run() {
   console.log("🚀 Initiating Sefaria Discovery Loop...");
 
-  if (!GITHUB_PAT) {
+  if (!GITHUB_PAT && !process.env.VERCEL) {
     console.warn(
-      "[!] No GITHUB_PAT found. Crawler will hit 60req/hr limit quickly."
+      "[!] No GITHUB_PAT found. Local crawling will be restricted to 60req/hr."
     );
   }
 
-  loadPersistedState();
+  initializeEnvironment();
 
   console.log(
-    `[Resume]: Found ${manuscriptIndex.index.length} manuscripts. Skipping ${checkpointState.completed_dirs.length} folders.`
+    `[Resume]: Found ${manuscriptIndex.index.length} entries. Skipping ${checkpointState.completed_dirs.length} folders.`
   );
   console.log("--------------------------------------------------");
 
@@ -216,6 +219,7 @@ async function run() {
   } catch (err) {
     console.error("❌ Crawler interrupted:", err.message);
     persist();
+    if (process.env.VERCEL) process.exit(1);
   }
 }
 
