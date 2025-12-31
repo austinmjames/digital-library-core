@@ -1,4 +1,4 @@
-// @ts-ignore: Deno types are resolved at runtime by Supabase
+// @ts-expect-error: Deno types are resolved at runtime by Supabase
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
@@ -8,11 +8,19 @@ const corsHeaders = {
 };
 
 /**
- * DrashX Semantic Search Function
+ * DrashX Semantic Search Function (v2.1 - Type Safe)
+ * Filepath: supabase/functions/hybrid-search/index.ts
  * Role: Generates embeddings via OpenAI and executes Hybrid Search RPC.
- * Directives: Implements Exponential Backoff for API resilience.
+ * Fix: Resolved 'Deno' name errors, replaced 'any' types, and handled unknown errors.
  */
 
+interface OpenAIEmbeddingResponse {
+  data: {
+    embedding: number[];
+  }[];
+}
+
+// @ts-expect-error: Deno is a global available in Supabase Edge Functions
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -21,7 +29,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseClient = createClient(
+      // @ts-expect-error: Deno environment access
       Deno.env.get("SUPABASE_URL") ?? "",
+      // @ts-expect-error: Deno environment access
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
@@ -34,18 +44,23 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Exponential Backoff implementation for OpenAI
+    /**
+     * fetchEmbeddingWithRetry
+     * Role: Obtains vector representation from OpenAI with exponential backoff.
+     */
     const fetchEmbeddingWithRetry = async (
       text: string,
       retries = 5
-    ): Promise<any> => {
+    ): Promise<OpenAIEmbeddingResponse> => {
       let delay = 1000;
       for (let i = 0; i < retries; i++) {
         try {
+          // @ts-expect-error: Deno environment access
+          const apiKey = Deno.env.get("OPENAI_API_KEY");
           const response = await fetch("https://api.openai.com/v1/embeddings", {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+              Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -54,12 +69,13 @@ Deno.serve(async (req: Request) => {
             }),
           });
 
-          if (response.ok) return await response.json();
+          if (response.ok)
+            return (await response.json()) as OpenAIEmbeddingResponse;
 
           // Only retry on rate limits or server errors
           if (response.status !== 429 && response.status < 500) {
-            const err = await response.json();
-            throw new Error(err.error?.message || "OpenAI API Error");
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "OpenAI API Error");
           }
         } catch (err) {
           if (i === retries - 1) throw err;
@@ -68,6 +84,7 @@ Deno.serve(async (req: Request) => {
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay *= 2;
       }
+      throw new Error("Failed to fetch embedding after maximum retries");
     };
 
     const embeddingData = await fetchEmbeddingWithRetry(query);
@@ -90,8 +107,10 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "An internal error occurred";
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
