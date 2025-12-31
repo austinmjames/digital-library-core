@@ -24,11 +24,10 @@ import { useMemo, useState } from "react";
 import sefariaRegistry from "@/lib/etl/sefaria_structured_index.json";
 
 /**
- * Ingest Orchestrator (v3.3 - Optimized)
+ * Ingest Orchestrator (v3.4 - Null Safe)
  * Filepath: app/admin/ingest/page.tsx
  * Role: Advanced admin tool to browse and sync manuscripts from Sefaria.
- * PRD Alignment: Section 3.1 (Reliability & Performance).
- * Fixes: Removed unused 'GroupedFolder' interface to resolve linting errors.
+ * Fix: Resolved 'toLowerCase' crash by adding defensive null-checks during filtering.
  */
 
 interface Manuscript {
@@ -73,37 +72,41 @@ export default function IngestPage() {
     status: "idle",
   });
 
-  // 1. Tiered Performance Logic:
-  // Step A: Group the entire registry ONCE on mount.
+  // 1. Tiered Performance Logic
   const groupedRegistry = useMemo(() => {
-    const registry = sefariaRegistry as unknown as RegistryData;
+    const registry = (sefariaRegistry as unknown as RegistryData) || {
+      index: [],
+    };
     const foldersMap = new Map<string, Manuscript[]>();
     const index = registry.index || [];
 
-    // Efficient O(N) pass with single reference pushes
     index.forEach((item: Manuscript) => {
-      if (!foldersMap.has(item.parentFolder)) {
-        foldersMap.set(item.parentFolder, []);
+      // Defensive check for folder path existence
+      const path = item.parentFolder || "Uncategorized";
+      if (!foldersMap.has(path)) {
+        foldersMap.set(path, []);
       }
-      foldersMap.get(item.parentFolder)!.push(item);
+      foldersMap.get(path)!.push(item);
     });
 
     return Array.from(foldersMap.entries()).map(([path, versions]) => ({
       path,
       versions,
     }));
-  }, []); // Static dependency - run once
+  }, []);
 
-  // Step B: Filter the pre-grouped list based on user search query.
+  // Step B: Filter with strict null-safety
   const bookFolders = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    const filtered = groupedRegistry.filter(
-      (f) =>
-        f.path.toLowerCase().includes(query) ||
-        f.versions[0]?.book.toLowerCase().includes(query)
-    );
+    const filtered = groupedRegistry.filter((f) => {
+      // Fix: Added optional chaining and fallbacks to prevent 'toLowerCase' on undefined
+      const pathMatch = (f.path || "").toLowerCase().includes(query);
+      const bookMatch = (f.versions[0]?.book || "")
+        .toLowerCase()
+        .includes(query);
+      return pathMatch || bookMatch;
+    });
 
-    // Performance Guard: Limit visible DOM nodes to top 100 results
     return filtered.slice(0, 100);
   }, [groupedRegistry, searchQuery]);
 
@@ -112,18 +115,15 @@ export default function IngestPage() {
       [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 12)
     );
 
-  // 2. Selection Handler
   const selectFolder = (folderPath: string, versions: Manuscript[]) => {
     setSelectedParentFolder(folderPath);
-    // Auto-select first Hebrew and first English found
     const heb = versions.find((v) => v.language === "Hebrew") || null;
     const eng = versions.find((v) => v.language === "English") || null;
     setHebrewVersion(heb);
     setEnglishVersion(eng);
-    addLog(`Target locked: ${versions[0]?.book}`);
+    addLog(`Target locked: ${versions[0]?.book || "Unknown Book"}`);
   };
 
-  // 3. Execution Engine
   const runIngest = async () => {
     if (!hebrewVersion) return;
 
@@ -135,7 +135,6 @@ export default function IngestPage() {
       }));
       addLog(`Initiating dual-stream ingestion for ${hebrewVersion.book}...`);
 
-      // a. Fetch JSON data from GitHub
       const [hebRes, engRes] = await Promise.all([
         fetch(hebrewVersion.rawUrl).then((r) => r.json()),
         englishVersion
@@ -152,7 +151,6 @@ export default function IngestPage() {
         totalVerses: hebChapters.flat().length,
       }));
 
-      // b. Upsert Book Metadata
       const { data: bookRecord, error: bookError } = await supabase
         .schema("library")
         .from("books")
@@ -171,7 +169,6 @@ export default function IngestPage() {
 
       if (bookError) throw bookError;
 
-      // c. Synchronization Loop
       const batchSize = 40;
       let batch = [];
       let processed = 0;
@@ -225,7 +222,9 @@ export default function IngestPage() {
     }
   };
 
-  const registryMetadata = sefariaRegistry as unknown as RegistryData;
+  const registryMetadata = (sefariaRegistry as unknown as RegistryData) || {
+    total_count: 0,
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-12 space-y-12 selection:bg-zinc-950 selection:text-white">
@@ -244,13 +243,12 @@ export default function IngestPage() {
         <div className="flex gap-2">
           <div className="px-4 py-2 bg-zinc-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 shadow-xl">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Mirror Synced: {registryMetadata.total_count} Versions
+            Mirror Synced: {registryMetadata.total_count || 0} Versions
           </div>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-        {/* Left: Registry Browser */}
         <div className="lg:col-span-4 space-y-6">
           <div className="relative group">
             <Search
@@ -326,7 +324,6 @@ export default function IngestPage() {
           </div>
         </div>
 
-        {/* Center: Ingest Workflow */}
         <div className="lg:col-span-5 space-y-8">
           <DrashCard className="min-h-[300px]">
             <DrashCardHeader showDivider>
@@ -340,7 +337,6 @@ export default function IngestPage() {
             <DrashCardContent className="space-y-10 p-10">
               {selectedParentFolder ? (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
-                  {/* Hebrew Selection */}
                   <div className="space-y-4">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">
                       Source (Hebrew)
@@ -371,7 +367,6 @@ export default function IngestPage() {
                     </div>
                   </div>
 
-                  {/* English Selection */}
                   <div className="space-y-4">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">
                       Translation (English)
@@ -431,7 +426,6 @@ export default function IngestPage() {
           </DrashButton>
         </div>
 
-        {/* Right: Progress & Logs */}
         <div className="lg:col-span-3 space-y-8">
           <DrashCard
             variant={stats.status === "completed" ? "chaver" : "default"}
