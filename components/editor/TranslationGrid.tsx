@@ -22,8 +22,10 @@ interface TranslationGridProps {
 }
 
 /**
- * TranslationGrid
+ * TranslationGrid (v1.1 - Type Safe)
+ * Filepath: components/editor/TranslationGrid.tsx
  * Role: A structured grid for segment-by-segment translation projects.
+ * Fix: Resolved 'defaultValue' type error where 'null' was not assignable to textarea.
  */
 export const TranslationGrid = ({
   segments,
@@ -79,12 +81,13 @@ export const TranslationGrid = ({
                   className="font-serif-hebrew text-right text-2xl leading-loose text-zinc-900"
                   dir="rtl"
                 >
-                  [Hebrew source content]
+                  {seg.hebrew_source || "[Hebrew source content]"}
                 </p>
               </div>
               <div className="relative group">
                 <textarea
-                  defaultValue={seg.translated_content}
+                  // Fix: Fallback to empty string because defaultValue does not accept null
+                  defaultValue={seg.translated_content ?? ""}
                   onBlur={(e) =>
                     saveSegment.mutate({
                       ref: seg.ref,

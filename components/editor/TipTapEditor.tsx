@@ -2,7 +2,7 @@
 
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Bold,
@@ -19,9 +19,10 @@ import React from "react";
 import { DrashLink } from "./DrashLink";
 
 /**
- * TipTapEditor Component
- * * Role: The high-fidelity rich text core of DrashX.
- * Style: "Paper" aesthetic with floating/minimalist controls.
+ * TipTapEditor Component (v1.2 - Strict Typing)
+ * Filepath: components/editor/TipTapEditor.tsx
+ * Role: The high-fidelity rich text core of DrashX.
+ * Fix: Replaced 'any' with the 'Editor' type from @tiptap/react.
  */
 
 interface TipTapEditorProps {
@@ -30,7 +31,11 @@ interface TipTapEditorProps {
   placeholder?: string;
 }
 
-const Toolbar = ({ editor }: { editor: any }) => {
+interface ToolbarProps {
+  editor: Editor | null;
+}
+
+const Toolbar = ({ editor }: ToolbarProps) => {
   if (!editor) return null;
 
   const btnClass = (active: boolean) =>
@@ -45,12 +50,14 @@ const Toolbar = ({ editor }: { editor: any }) => {
       <button
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         className={btnClass(editor.isActive("heading", { level: 1 }))}
+        type="button"
       >
         <Heading1 size={16} />
       </button>
       <button
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         className={btnClass(editor.isActive("heading", { level: 2 }))}
+        type="button"
       >
         <Heading2 size={16} />
       </button>
@@ -58,18 +65,21 @@ const Toolbar = ({ editor }: { editor: any }) => {
       <button
         onClick={() => editor.chain().focus().toggleBold().run()}
         className={btnClass(editor.isActive("bold"))}
+        type="button"
       >
         <Bold size={16} />
       </button>
       <button
         onClick={() => editor.chain().focus().toggleItalic().run()}
         className={btnClass(editor.isActive("italic"))}
+        type="button"
       >
         <Italic size={16} />
       </button>
       <button
         onClick={() => editor.chain().focus().toggleUnderline().run()}
         className={btnClass(editor.isActive("underline"))}
+        type="button"
       >
         <UnderlineIcon size={16} />
       </button>
@@ -77,18 +87,21 @@ const Toolbar = ({ editor }: { editor: any }) => {
       <button
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={btnClass(editor.isActive("bulletList"))}
+        type="button"
       >
         <List size={16} />
       </button>
       <button
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         className={btnClass(editor.isActive("orderedList"))}
+        type="button"
       >
         <ListOrdered size={16} />
       </button>
       <button
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         className={btnClass(editor.isActive("blockquote"))}
+        type="button"
       >
         <Quote size={16} />
       </button>
@@ -96,6 +109,7 @@ const Toolbar = ({ editor }: { editor: any }) => {
       <button
         className="p-2 text-zinc-300 cursor-help"
         title="Type 'Book.1.1' to create a link"
+        type="button"
       >
         <Link2 size={16} />
       </button>

@@ -17,8 +17,9 @@ import { useEffect, useState } from "react";
 
 /**
  * DrashX Community Market
- * Filepath: src/components/library/CommunityView.tsx
+ * Filepath: components/library/CommunityView.tsx
  * Role: Discovery layer for User Generated Content (UGC) and Groups.
+ * Fix: Replaced 'any' with strict internal interfaces and fixed useEffect dependency warning.
  */
 
 // --- Types ---
@@ -34,9 +35,8 @@ interface CommunityResource {
   type: "TRANSLATION" | "NOTEBOOK" | "PLAN";
   description: string | null;
   is_public: boolean;
-  author_id: string;
+  author_id?: string;
   created_at: string;
-  // Join fields
   author?: AuthorProfile;
   stats?: { adds: number; rating: number };
 }
@@ -46,9 +46,29 @@ interface Group {
   name: string;
   description: string | null;
   max_members: number;
-  current_members?: number; // Made optional to handle raw DB fetch
+  current_members?: number;
   is_verified: boolean;
   active_plan_id?: string;
+}
+
+// Internal interfaces for raw Supabase responses
+interface RawResource {
+  id: string;
+  title: string;
+  type: "TRANSLATION" | "NOTEBOOK" | "PLAN";
+  description: string | null;
+  is_public: boolean;
+  created_at: string;
+  author: { display_name: string } | null;
+}
+
+interface RawGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  max_members: number;
+  is_verified: boolean;
+  current_members?: number;
 }
 
 export const CommunityView = () => {
@@ -68,8 +88,6 @@ export const CommunityView = () => {
       setLoading(true);
       try {
         // 1. Fetch Resources (Notebooks/Translations)
-        // In a real app, you'd join with 'users' table here.
-        // For MVP, we fetch basic resource data.
         const { data: resData, error: resError } = await supabase
           .from("user_resources")
           .select(
@@ -82,7 +100,7 @@ export const CommunityView = () => {
             created_at,
             author:user_id ( display_name )
           `
-          ) // Supabase Join Syntax
+          )
           .eq("is_public", true)
           .order("created_at", { ascending: false })
           .limit(10);
@@ -90,7 +108,6 @@ export const CommunityView = () => {
         if (resError) throw resError;
 
         // 2. Fetch Groups
-        // We'll simulate member count for now if group_members aggregation isn't ready
         const { data: groupData, error: groupError } = await supabase
           .from("groups")
           .select("id, name, description, max_members, is_verified")
@@ -98,14 +115,25 @@ export const CommunityView = () => {
 
         if (groupError) throw groupError;
 
-        // Transform Data
-        const formattedResources = (resData || []).map((r: any) => ({
-          ...r,
-          author: r.author, // Supabase returns joined data as an object or array
+        // Transform Resource Data with strict typing
+        const formattedResources: CommunityResource[] = (
+          (resData as unknown as RawResource[]) || []
+        ).map((r) => ({
+          id: r.id,
+          title: r.title,
+          type: r.type,
+          description: r.description,
+          is_public: r.is_public,
+          created_at: r.created_at,
+          author: r.author
+            ? { display_name: r.author.display_name }
+            : undefined,
         }));
 
-        // Transform Group Data (Add fallback for current_members)
-        const formattedGroups = (groupData || []).map((g: any) => ({
+        // Transform Group Data with strict typing
+        const formattedGroups: Group[] = (
+          (groupData as unknown as RawGroup[]) || []
+        ).map((g) => ({
           ...g,
           current_members: g.current_members || 0,
         }));
@@ -120,7 +148,7 @@ export const CommunityView = () => {
     }
 
     fetchCommunityData();
-  }, []);
+  }, [supabase]); // Fixed missing dependency
 
   if (loading) {
     return (
@@ -267,7 +295,6 @@ export const CommunityView = () => {
                     >
                       {res.type}
                     </span>
-                    {/* Mock verification/star for MVP */}
                     <div className="text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Star
                         size={16}
