@@ -1,138 +1,136 @@
 "use client";
 
 import { cn } from "@/lib/utils/utils";
-import { Sparkles, User } from "lucide-react";
+import {
+  Book,
+  Flame,
+  GraduationCap,
+  Hash,
+  Library,
+  LucideIcon,
+  Microscope,
+  PenTool,
+  Scroll,
+  Shield,
+  Sparkles,
+  User,
+} from "lucide-react";
 import Image from "next/image";
-import React, { useState } from "react";
+import React from "react";
 
 /**
- * Avatar Component (v2.0 - Tier Aware)
+ * Avatar Component (v3.1 - Robustness Fix)
  * Filepath: components/ui/Avatar.tsx
- * Role: Optimized profile display with Chaver (Pro) tier visual hooks.
- * PRD Alignment: Section 2.2 (Social Identity) & 5.0 (Monetization).
+ * Role: Renders images, custom icons, or text logos based on scholar configuration.
+ * Fix: Added defensive guard for config.value to prevent runtime crashes (substring error).
  */
+
+export interface AvatarConfig {
+  type: "icon" | "text" | "image";
+  value: string; // Icon name, text string, or image URL
+  color: string; // Tailwind text color class
+  bg: string; // Tailwind bg color class
+}
 
 interface AvatarProps {
   src?: string | null;
-  alt?: string;
+  config?: AvatarConfig;
   initials?: string;
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
-  tier?: "free" | "pro"; // Added for PRD monetization alignment
+  size?: "sm" | "md" | "lg" | "xl";
   className?: string;
 }
 
+const ICON_MAP: Record<string, LucideIcon> = {
+  book: Book,
+  scroll: Scroll,
+  pen: PenTool,
+  flame: Flame,
+  sparkles: Sparkles,
+  hash: Hash,
+  shield: Shield,
+  grad: GraduationCap,
+  lab: Microscope,
+  library: Library,
+};
+
 export const Avatar: React.FC<AvatarProps> = ({
   src,
-  alt = "User Avatar",
+  config,
   initials,
   size = "md",
-  tier = "free",
   className,
 }) => {
-  const [hasError, setHasError] = useState(false);
-
   const sizeMap = {
-    xs: 24,
-    sm: 32,
-    md: 48,
-    lg: 64,
-    xl: 160, // Increased for Profile Hero sections
+    sm: "w-10 h-10 text-xs rounded-xl",
+    md: "w-16 h-16 text-sm rounded-2xl",
+    lg: "w-24 h-24 text-xl rounded-[2rem]",
+    xl: "w-40 h-40 text-4xl rounded-[3rem]",
   };
 
-  const pixelSize = sizeMap[size];
-  const isPro = tier === "pro";
+  const iconSizeMap = {
+    sm: 18,
+    md: 28,
+    lg: 40,
+    xl: 64,
+  };
 
-  const containerClasses = cn(
-    "relative flex items-center justify-center overflow-hidden shrink-0 transition-all duration-500",
-    {
-      // Geometry Tokens
-      "rounded-lg": size === "xs",
-      "rounded-xl": size === "sm",
-      "rounded-2xl": size === "md",
-      "rounded-[2rem]": size === "lg",
-      "rounded-[3rem]": size === "xl",
-
-      // Tier Styling
-      "bg-zinc-50 border border-zinc-100": !isPro,
-      "bg-zinc-950 border-2 border-amber-500/30 shadow-xl scale-[1.02]": isPro,
-
-      // Sizing
-      "w-6 h-6": size === "xs",
-      "w-8 h-8": size === "sm",
-      "w-12 h-12": size === "md",
-      "w-16 h-16": size === "lg",
-      "w-40 h-40": size === "xl",
-    },
-    className
-  );
-
-  const renderContent = () => {
-    if (src && !hasError) {
-      return (
-        <Image
-          src={src}
-          alt={alt}
-          width={pixelSize}
-          height={pixelSize}
-          className="object-cover w-full h-full"
-          onError={() => setHasError(true)}
-          priority={size === "xl"}
-        />
-      );
-    }
-
-    if (initials) {
-      return (
-        <span
-          className={cn(
-            "font-black uppercase tracking-tighter select-none transition-colors",
-            isPro ? "text-white" : "text-zinc-400",
-            {
-              "text-[8px]": size === "xs",
-              "text-[10px]": size === "sm",
-              "text-sm": size === "md",
-              "text-xl": size === "lg",
-              "text-5xl": size === "xl",
-            }
-          )}
-        >
-          {initials.substring(0, 1)}
-        </span>
-      );
-    }
-
+  // 1. Rendering Logic: Prioritize Image -> Custom Config -> Initials -> Default
+  if (src || (config?.type === "image" && config.value)) {
     return (
-      <User
-        className={isPro ? "text-amber-500/50" : "text-zinc-200"}
-        size={pixelSize * 0.5}
-      />
+      <div
+        className={cn(
+          "relative overflow-hidden shrink-0 shadow-xl border border-zinc-100",
+          sizeMap[size],
+          className
+        )}
+      >
+        <Image
+          src={src || config?.value || ""}
+          alt="Avatar"
+          fill
+          className="object-cover"
+        />
+      </div>
     );
-  };
+  }
 
+  // Defensive Check: Only attempt custom rendering if config AND value are present
+  if (config && config.value) {
+    const Icon = ICON_MAP[config.value];
+    return (
+      <div
+        className={cn(
+          "flex items-center justify-center shrink-0 shadow-lg transition-all border border-white/10",
+          sizeMap[size],
+          config.bg,
+          config.color,
+          className
+        )}
+      >
+        {config.type === "icon" && Icon ? (
+          <Icon size={iconSizeMap[size]} strokeWidth={2.5} />
+        ) : (
+          <span className="font-black uppercase tracking-tighter select-none">
+            {config.value.substring(0, 2)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback: If no config/value, use initials or the standard User icon
   return (
-    <div className={containerClasses}>
-      {renderContent()}
-
-      {/* Premium Badge Overlay (PRD 5.0) */}
-      {isPro && size !== "xs" && (
-        <div
-          className={cn(
-            "absolute bg-amber-500 text-zinc-950 flex items-center justify-center shadow-lg border-2 border-zinc-950",
-            {
-              "-bottom-1 -right-1 p-0.5 rounded-lg": size === "sm",
-              "-bottom-1 -right-1 p-1 rounded-xl": size === "md",
-              "bottom-1 right-1 p-1.5 rounded-2xl": size === "lg",
-              "bottom-2 right-2 p-2.5 rounded-[1.25rem]": size === "xl",
-            }
-          )}
-        >
-          <Sparkles size={size === "xl" ? 18 : 10} fill="currentColor" />
-        </div>
+    <div
+      className={cn(
+        "flex items-center justify-center shrink-0 bg-zinc-100 text-zinc-400 border border-zinc-200",
+        sizeMap[size],
+        className
       )}
-
-      {/* Pro Glow Accent */}
-      {isPro && (
-        <div className="absolute inset-0 bg-amber-500/5 pointer-events-none" />
+    >
+      {initials ? (
+        <span className="font-black uppercase">{(initials || "?")[0]}</span>
+      ) : (
+        <User size={iconSizeMap[size] * 0.8} />
       )}
     </div>
   );

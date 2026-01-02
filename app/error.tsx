@@ -1,14 +1,20 @@
 "use client";
 
-import { AlertTriangle, Home, RefreshCcw, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  Home,
+  Info,
+  RefreshCcw,
+  ShieldAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 
 /**
- * Global Error Boundary (DrashX v2.0)
+ * Global Error Boundary (DrashX v2.1 - Material Edition)
  * Filepath: app/error.tsx
- * Role: Catches runtime exceptions and provides a "Broken Tablet" recovery UI.
- * PRD Alignment: Section 3.1 (Reliability & Resilience).
+ * Role: Catches runtime exceptions and provides a recovery interface.
+ * Style: Modern Google (Material 3). Clean, non-italic, high-clarity.
  */
 
 export default function GlobalError({
@@ -19,77 +25,91 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to console for development, or a service in production
+    // Log the error to console for development or a telemetry service
     console.error("[DrashX Engine] Critical Exception:", error);
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAF9F6] p-8 selection:bg-zinc-950 selection:text-white">
-      {/* Subtle Paper Texture Overlay */}
-      <div className="fixed inset-0 pointer-events-none opacity-[0.02] bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')]" />
-
+    <div className="min-h-screen flex items-center justify-center bg-[var(--paper)] p-6 selection:bg-blue-100 selection:text-blue-900 transition-colors duration-300">
       <div className="max-w-md w-full text-center space-y-10 animate-in fade-in zoom-in-95 duration-700 relative z-10">
-        {/* Visual "Broken Tablet" Identity */}
+        {/* Visual Identity: Material Alert Container */}
         <div className="relative inline-block">
-          <div className="p-8 bg-white rounded-[2rem] border border-zinc-100 shadow-2xl ring-8 ring-zinc-50">
+          <div className="p-8 bg-white dark:bg-zinc-800 rounded-3xl border border-[var(--border-subtle)] shadow-xl ring-8 ring-[var(--surface-hover)]">
             <AlertTriangle
-              className="w-14 h-14 text-amber-500 animate-pulse"
-              strokeWidth={1.5}
+              className="w-14 h-14 text-[var(--accent-warning)] animate-pulse"
+              strokeWidth={2}
             />
           </div>
-          <div className="absolute -top-3 -right-3 p-2 bg-zinc-950 text-white rounded-xl shadow-xl border border-white/10">
-            <ShieldAlert size={16} className="text-rose-500" />
+          <div className="absolute -top-3 -right-3 p-2.5 bg-[var(--ink)] text-white rounded-2xl shadow-lg border border-white/10">
+            <ShieldAlert
+              size={18}
+              className="text-[var(--accent-danger)]"
+              strokeWidth={2.5}
+            />
           </div>
         </div>
 
         <div className="space-y-4">
-          <h1 className="text-4xl font-black text-zinc-900 tracking-tighter uppercase leading-tight">
+          <h1 className="text-3xl font-bold text-[var(--ink)] tracking-tight uppercase leading-tight">
             Scriptorium Stalled
           </h1>
-          <div className="space-y-2">
-            <p className="text-zinc-500 font-serif italic text-lg opacity-80 leading-relaxed">
-              &ldquo;One does not acquire Torah without a few stumbles.&rdquo;
+          <div className="space-y-3">
+            <p className="text-[var(--ink-muted)] font-normal text-base leading-relaxed px-4">
+              One does not acquire Torah without a few stumbles. The registers
+              encountered an unhandled logic gap.
             </p>
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">
-              The registers encountered an unhandled logic gap.
-            </p>
+            <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-[0.2em]">
+              <Info
+                size={12}
+                strokeWidth={3}
+                className="text-[var(--accent-primary)]"
+              />
+              Infrastructure sync interrupted
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-4">
-          {/* DrashX Primary Action Token */}
+        <div className="flex flex-col gap-3">
+          {/* Primary Action: Reconnection */}
           <button
             onClick={() => reset()}
-            className="group relative flex items-center justify-center gap-3 w-full py-5 bg-zinc-950 text-white text-[11px] font-black uppercase tracking-[0.25em] rounded-2xl hover:bg-zinc-800 transition-all shadow-2xl active:scale-[0.98] overflow-hidden"
+            className="btn-primary w-full py-4 text-xs tracking-widest shadow-lg shadow-blue-500/20"
           >
-            <div className="absolute inset-0 bg-white/5 -translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
             <RefreshCcw
-              size={16}
-              className="text-amber-400 group-hover:rotate-180 transition-transform duration-700"
+              size={18}
+              strokeWidth={2.5}
+              className="group-hover:rotate-180 transition-transform duration-700"
             />
-            <span className="relative">Attempt Reconnection</span>
+            ATTEMPT RECONNECTION
           </button>
 
-          {/* DrashX Secondary Action Token */}
+          {/* Secondary Action: Escape Hatch */}
           <Link
             href="/library"
-            className="flex items-center justify-center gap-3 w-full py-5 bg-white border border-zinc-200 text-zinc-600 text-[11px] font-black uppercase tracking-[0.25em] rounded-2xl hover:bg-zinc-50 hover:border-zinc-950 hover:text-zinc-950 transition-all active:scale-[0.98]"
+            className="btn-secondary w-full py-4 text-xs tracking-widest"
           >
-            <Home size={16} />
-            Return to Library
+            <Home size={18} strokeWidth={2.5} />
+            RETURN TO LIBRARY
           </Link>
         </div>
 
-        {/* Diagnostic Metadata Footer */}
-        <div className="pt-10 border-t border-zinc-100 flex flex-col items-center gap-2">
-          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-[0.4em]">
+        {/* Diagnostic Metadata Footer: Material Code Block */}
+        <div className="pt-10 border-t border-[var(--border-subtle)] flex flex-col items-center gap-3">
+          <span className="text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-[0.3em]">
             Diagnostic Trace
           </span>
-          <code className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-50 px-3 py-1 rounded-md">
+          <code className="text-[11px] font-mono font-medium text-[var(--ink)] bg-[var(--surface-hover)] border border-[var(--border-subtle)] px-4 py-1.5 rounded-lg shadow-inner">
             {error.digest || "RUNTIME_EXCEPTION_0x11"}
           </code>
         </div>
       </div>
+
+      {/* Global Brand Footer Overlay */}
+      <footer className="fixed bottom-0 left-0 right-0 p-10 flex justify-center pointer-events-none z-0">
+        <p className="text-[10px] font-medium uppercase tracking-[1.5em] text-[var(--ink-muted)] opacity-30">
+          DrashX Resilience v2.1
+        </p>
+      </footer>
     </div>
   );
 }

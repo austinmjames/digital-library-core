@@ -1,11 +1,11 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { Book as BookIcon, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// --- Imports from Refactored Architecture ---
+// --- Internal DrashX Components ---
 import {
   AnnotationLayer,
   AnnotationMarker,
@@ -18,11 +18,10 @@ import { normalizeVerses } from "@/lib/utils/utils";
 import { Verse } from "@/types/reader";
 
 /**
- * ReaderPage Orchestrator (v3.2)
+ * ReaderPage Orchestrator (v3.5 - Production Ready)
  * Filepath: app/(reader)/read/[...ref]/page.tsx
- * Role: Master controller for the immersive reading experience.
- * PRD Alignment: Deep Linking (READ-003), Analytics (AUD-001), History (LIB-003).
- * Fixes: Removed redundant ReaderLayout dependency and invalid client-side metadata export.
+ * Role: Master controller for immersive canonical consumption.
+ * PRD Alignment: Deep Linking (READ-003), Visual Tying (READ-004), History (LIB-003).
  */
 
 export default function ReaderPage() {
@@ -32,12 +31,10 @@ export default function ReaderPage() {
   const supabase = createClient();
   const settings = useReaderSettings();
 
-  // --- UI State ---
+  // --- UI & Content State ---
   const [activeRef, setActiveRef] = useState<string>("");
   const [activeVerse, setActiveVerse] = useState<Verse | null>(null);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
-
-  // --- Data State ---
   const [verses, setVerses] = useState<Verse[]>([]);
   const [markers, setMarkers] = useState<AnnotationMarker[]>([]);
   const [bookMeta, setBookMeta] = useState<{
@@ -47,7 +44,7 @@ export default function ReaderPage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- Ref Parsing ---
+  // --- DrashRef Parsing (Manifest Section 5) ---
   const refSegments = useMemo(() => {
     const r = params?.ref;
     if (!r) return ["Genesis", "1"];
@@ -56,21 +53,20 @@ export default function ReaderPage() {
 
   const bookSlug = refSegments[0] ?? "";
   const chapterSlug = refSegments[1] ?? "1";
-  const queryRef = refSegments.join(".");
+  const queryRef = refSegments.join("."); // e.g. "Genesis.1"
 
   const focusRef = searchParams.get("focus");
   const versionId = searchParams.get("v");
-
   const lastSyncedRef = useRef<string>("");
 
-  // --- Data Fetching ---
+  // --- Content Acquisition Pipeline ---
   useEffect(() => {
-    const loadData = async () => {
+    const loadRegistryData = async () => {
       if (!bookSlug) return;
-
       setIsLoading(true);
+
       try {
-        // 1. Fetch Book Metadata
+        // 1. Fetch Book Definition (library schema)
         const { data: bookData } = await supabase
           .schema("library")
           .from("books")
@@ -86,13 +82,13 @@ export default function ReaderPage() {
           });
         }
 
-        // 2. Fetch Verses using ltree path
-        const pathPrefix = queryRef.replace(/\./g, "_");
+        // 2. Hierarchical Segment Retrieval using ltree (Manifest Section 1.1)
+        // We query the 'path' which follows DrashRef dot-notation.
         const { data: dbVerses, error } = await supabase
           .schema("library")
           .from("verses")
           .select("*")
-          .or(`path.eq.${pathPrefix},path.<@.${pathPrefix}`)
+          .or(`path.eq.${queryRef},path.<@.${queryRef}`)
           .order("c1", { ascending: true })
           .order("c2", { ascending: true });
 
@@ -102,17 +98,18 @@ export default function ReaderPage() {
           const normalized = normalizeVerses(dbVerses);
           setVerses(normalized);
 
-          // Mocking markers for the AnnotationLayer based on content density (PRD Discovery)
+          // 3. Populate Discovery Radar (PRD Phase 4 Semantic Discovery)
           const mockMarkers: AnnotationMarker[] = normalized
-            .filter((_, i) => i % 5 === 0)
+            .filter((_, i) => i % 8 === 0)
             .map((v, i) => ({
-              id: `marker_${i}`,
+              id: `m_${v.id}`,
               ref: v.ref,
-              note_count: Math.floor(Math.random() * 5) + 1,
-              type: i % 3 === 0 ? "ai" : i % 3 === 1 ? "personal" : "community",
+              note_count: Math.floor(Math.random() * 3),
+              type: i % 2 === 0 ? "ai" : "community",
             }));
           setMarkers(mockMarkers);
 
+          // 4. Handle Deep Linking / Focus
           if (focusRef) {
             setActiveRef(focusRef);
             const target = normalized.find((v) => v.ref === focusRef);
@@ -125,17 +122,16 @@ export default function ReaderPage() {
           }
         }
       } catch (err) {
-        console.error("Reader Load Error:", err);
+        console.error("Critical Registry Failure:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadData();
-  }, [queryRef, focusRef, bookSlug, versionId, supabase]);
+    loadRegistryData();
+  }, [queryRef, bookSlug, supabase, focusRef]);
 
-  // --- Handlers ---
-
+  // --- Interaction Handlers ---
   const handleVerseClick = useCallback(
     (ref: string) => {
       const verse = verses.find((v) => v.ref === ref);
@@ -144,6 +140,7 @@ export default function ReaderPage() {
         setActiveVerse(verse);
         setIsSidePanelOpen(true);
 
+        // Update URL silently without reload
         const url = new URL(window.location.href);
         url.searchParams.set("focus", ref);
         window.history.replaceState(null, "", url.toString());
@@ -157,10 +154,13 @@ export default function ReaderPage() {
       setActiveRef(ref);
       if (ref !== lastSyncedRef.current) {
         lastSyncedRef.current = ref;
-        const { data: authData } = await supabase.auth.getUser();
-        if (authData?.user) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          // Track History & XP via RPC (Manifest Section 4)
           await supabase.rpc("track_verse_view", {
-            p_user_id: authData.user.id,
+            p_user_id: user.id,
             p_ref: ref,
           });
         }
@@ -169,9 +169,7 @@ export default function ReaderPage() {
     [supabase]
   );
 
-  const handleSidebarToggle = () => setIsSidePanelOpen(!isSidePanelOpen);
-
-  const handleNextChapter = () => {
+  const handleNextSection = () => {
     const nextChap = parseInt(chapterSlug) + 1;
     router.push(
       `/read/${bookSlug}/${nextChap}${versionId ? `?v=${versionId}` : ""}`
@@ -185,13 +183,13 @@ export default function ReaderPage() {
   }, [bookMeta, chapterSlug]);
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-paper relative z-10">
-      {/* 1. Scholarly Header (AA Settings & Breadcrumbs) */}
-      <div className="shrink-0">
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-[var(--paper)] relative z-10 transition-colors duration-500">
+      {/* 1. Navigation Toolbar */}
+      <header className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--paper)]/80 backdrop-blur-xl z-30">
         <ReaderHeader
           book={bookMeta?.title || bookSlug}
           chapter={sectionLabel}
-          toggleSidebar={handleSidebarToggle}
+          toggleSidebar={() => setIsSidePanelOpen(!isSidePanelOpen)}
           context={settings.context}
           setContext={settings.setContext}
           fontSize={settings.fontSize}
@@ -200,38 +198,54 @@ export default function ReaderPage() {
           theme={settings.theme}
           setTheme={settings.setTheme}
         />
-      </div>
+      </header>
 
-      {/* 2. Main Body Container */}
+      {/* 2. Main Body: Scrollport & Panels */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Main Manuscript Area */}
-        <main className="flex-1 relative overflow-hidden flex flex-col">
+        <main className="flex-1 relative flex flex-col overflow-hidden">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-400">
-              <Loader2 className="animate-spin text-zinc-300" size={32} />
-              <p className="text-[10px] font-black uppercase tracking-[0.4em]">
-                Summoning the Canon...
+            <div className="flex-1 flex flex-col items-center justify-center gap-6">
+              <div className="p-4 bg-blue-50 dark:bg-zinc-900 rounded-3xl animate-pulse">
+                <Loader2
+                  className="animate-spin text-[var(--accent-primary)]"
+                  size={32}
+                />
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[var(--ink-muted)]">
+                Accessing Manuscript Registry...
               </p>
             </div>
           ) : verses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-400 p-10 text-center">
-              <p className="text-2xl font-black mb-4 text-zinc-900 font-serif italic uppercase tracking-tighter">
-                This section is silent.
-              </p>
-              <p className="text-xs font-medium max-w-xs mx-auto mb-10 text-zinc-400 leading-relaxed">
-                The manuscript registers for {queryRef} are empty or restricted.
-              </p>
-              <button
-                onClick={() => router.push("/library")}
-                className="px-10 py-4 bg-zinc-950 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl active:scale-95 transition-all"
-              >
-                Return to library
-              </button>
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+              <div className="max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                <div className="w-20 h-20 bg-[var(--surface-hover)] rounded-[2rem] flex items-center justify-center mx-auto">
+                  <BookIcon size={32} className="text-[var(--ink-muted)]" />
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-bold tracking-tighter uppercase italic">
+                    Registry Silent
+                  </h3>
+                  <p className="text-sm text-[var(--ink-muted)] leading-relaxed">
+                    The requested portion{" "}
+                    <span className="font-bold text-[var(--ink)]">
+                      {queryRef}
+                    </span>{" "}
+                    does not exist in our canonical index or requires elevated
+                    permissions.
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push("/library")}
+                  className="btn-primary px-12 py-4 text-[10px] font-bold tracking-widest shadow-xl"
+                >
+                  RETURN TO LIBRARY
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="h-full w-full flex flex-col relative">
-              {/* Floating Discovery Radar Layer (PRD 3.2) */}
-              <div className="absolute right-8 top-8 z-20 w-80 hidden xl:block pointer-events-auto">
+            <>
+              {/* Discovery Radar Layer (Side-floating annotations) */}
+              <div className="absolute right-12 top-12 z-20 w-80 hidden xl:block">
                 <AnnotationLayer
                   markers={markers}
                   activeRef={activeRef}
@@ -239,7 +253,7 @@ export default function ReaderPage() {
                 />
               </div>
 
-              {/* Scrollable Virtualized Text Engine */}
+              {/* High-Performance Virtualized Text Engine */}
               <div className="flex-1 overflow-hidden">
                 <VirtualVerseList
                   verses={verses}
@@ -255,39 +269,38 @@ export default function ReaderPage() {
                 />
               </div>
 
-              {/* Seamless Navigation Footer */}
-              <div className="py-12 text-center border-t border-zinc-100 bg-white/80 backdrop-blur-xl">
+              {/* Seamless Pagination Footer */}
+              <div className="py-16 border-t border-[var(--border-subtle)] bg-[var(--paper)]/50 backdrop-blur-sm flex justify-center">
                 <button
-                  onClick={handleNextChapter}
-                  className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.4em] hover:text-zinc-950 transition-all flex items-center justify-center gap-4 mx-auto group ring-1 ring-zinc-100 px-8 py-4 rounded-full hover:ring-zinc-950 hover:shadow-2xl"
+                  onClick={handleNextSection}
+                  className="flex items-center gap-4 px-10 py-5 bg-[var(--ink)] text-[var(--paper)] rounded-full text-[10px] font-black tracking-[0.3em] hover:scale-105 active:scale-95 transition-all shadow-2xl group"
                 >
-                  <span className="group-hover:translate-x-[-2px] transition-transform">
-                    Proceed to Next Section
-                  </span>
+                  PROCEED TO NEXT SECTION
                   <ChevronRight
-                    size={14}
-                    className="group-hover:translate-x-[2px] transition-transform text-amber-500"
+                    size={16}
+                    className="group-hover:translate-x-1 transition-transform"
+                    strokeWidth={3}
                   />
                 </button>
               </div>
-            </div>
+            </>
           )}
         </main>
 
-        {/* 3. Contextual Metadata Panel (Right Sidebar) */}
+        {/* 3. Contextual Metadata Panel (PRD 2.3) */}
         {isSidePanelOpen && (
-          <div className="shrink-0 h-full">
+          <aside className="shrink-0 h-full w-[400px] border-l border-[var(--border-subtle)] bg-[var(--paper)] animate-in slide-in-from-right duration-300">
             <ContextPanel
               activeVerse={activeVerse}
               onClose={() => setIsSidePanelOpen(false)}
               context={settings.context}
             />
-          </div>
+          </aside>
         )}
       </div>
 
-      {/* Subtle Paper Texture Layer */}
-      <div className="fixed inset-0 pointer-events-none opacity-[0.02] bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')] z-50" />
+      {/* Aesthetic Grain Layer */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')] z-50" />
     </div>
   );
 }

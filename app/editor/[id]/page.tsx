@@ -2,14 +2,18 @@
 
 import { useTranslations } from "@/lib/hooks/useTranslations";
 import { UserNote, useUserNotes } from "@/lib/hooks/useUserNotes";
+import { cn } from "@/lib/utils/utils";
 import { debounce } from "lodash";
 import {
+  CheckCircle2,
   ChevronLeft,
+  CloudUpload,
   Eye,
   Globe,
   LayoutGrid,
   Loader2,
   Lock,
+  MoreVertical,
   Share2,
   Type,
 } from "lucide-react";
@@ -27,11 +31,13 @@ interface ExtendedUserNote extends UserNote {
 }
 
 /**
- * Studio Page Orchestrator (v1.1 - Type Safe)
+ * Studio Page Orchestrator (v1.2.1 - Material Edition)
  * Filepath: app/editor/[id]/page.tsx
  * Role: Main entry point for editing Notebooks and Translations.
- * Fix: Resolved type error where Record<string, unknown> was assigned to string state.
+ * Style: Modern Google (Material 3). Non-italic, pill-based navigation.
+ * Fix: Resolved invalid icon import 'CloudCheck'.
  */
+
 export default function StudioPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -56,7 +62,6 @@ export default function StudioPage() {
       const extendedNote = note as ExtendedUserNote;
       setTitle(extendedNote.title || "Untitled Insight");
 
-      // Fix: Safely handle content which could be a TipTap Record or a String
       const rawContent = extendedNote.content;
       setContent(
         typeof rawContent === "string"
@@ -68,7 +73,7 @@ export default function StudioPage() {
     }
   }, [note]);
 
-  // 3. Debounced Persistence (PRD Performance Directive)
+  // 3. Debounced Persistence
   const debouncedSave = useMemo(
     () =>
       debounce((newContent: string) => {
@@ -94,84 +99,107 @@ export default function StudioPage() {
 
   if (noteLoading)
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-paper gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-600" />
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+      <div className="h-screen flex flex-col items-center justify-center bg-[var(--paper)] gap-4">
+        <Loader2
+          className="w-10 h-10 animate-spin text-[var(--accent-primary)]"
+          strokeWidth={2}
+        />
+        <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[var(--ink-muted)]">
           Opening Scriptorium...
         </p>
       </div>
     );
 
   return (
-    <div className="h-screen w-full flex flex-col bg-paper overflow-hidden selection:bg-zinc-950 selection:text-white">
-      {/* 1. Studio Header */}
-      <header className="h-16 border-b border-zinc-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-30">
-        <div className="flex items-center gap-4">
+    <div className="h-screen w-full flex flex-col bg-[var(--paper)] overflow-hidden selection:bg-blue-100 selection:text-blue-900 transition-colors duration-300">
+      {/* 1. Studio Header: High-Clarity Material Layout */}
+      <header className="h-16 border-b border-[var(--border-subtle)] bg-[var(--paper)]/95 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-30">
+        <div className="flex items-center gap-5">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-zinc-100 rounded-xl transition-colors text-zinc-400"
+            className="p-2 hover:bg-[var(--surface-hover)] rounded-full transition-all text-[var(--ink-muted)] hover:text-[var(--ink)] active:scale-95"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={20} strokeWidth={2.5} />
           </button>
-          <div className="h-8 w-px bg-zinc-100 mx-1" />
+
           <div className="flex flex-col">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="text-sm font-black text-zinc-900 bg-transparent border-none outline-none focus:ring-0 w-64 uppercase tracking-tight"
+              className="text-sm font-bold text-[var(--ink)] bg-transparent border-none outline-none focus:ring-0 w-64 tracking-tight"
               placeholder="Untitled Insight..."
             />
             <div className="flex items-center gap-2">
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${
-                  saveNote.isPending
-                    ? "bg-amber-400 animate-pulse"
-                    : "bg-green-500"
-                }`}
-              />
-              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">
-                {saveNote.isPending ? "Syncing..." : "Synced & Encrypted"}
+              {saveNote.isPending ? (
+                <CloudUpload
+                  size={10}
+                  className="text-blue-500 animate-pulse"
+                />
+              ) : (
+                <CheckCircle2
+                  size={10}
+                  className="text-[var(--accent-success)]"
+                />
+              )}
+              <span className="text-[9px] font-bold text-[var(--ink-muted)] uppercase tracking-wider">
+                {saveNote.isPending ? "Synchronizing" : "Encrypted & Saved"}
               </span>
             </div>
           </div>
         </div>
 
+        {/* Center: Mode Switcher Chips */}
+        <nav className="hidden md:flex items-center bg-[var(--surface-hover)] p-1 rounded-full border border-[var(--border-subtle)]">
+          <button
+            onClick={() => setMode("NOTEBOOK")}
+            className={cn(
+              "flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
+              mode === "NOTEBOOK"
+                ? "bg-white text-[var(--accent-primary)] shadow-sm border border-[var(--border-subtle)]/50"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            )}
+          >
+            <Type size={14} strokeWidth={2.5} /> Notebook
+          </button>
+          <button
+            onClick={() => setMode("TRANSLATION")}
+            className={cn(
+              "flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
+              mode === "TRANSLATION"
+                ? "bg-white text-[var(--accent-primary)] shadow-sm border border-[var(--border-subtle)]/50"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            )}
+          >
+            <LayoutGrid size={14} strokeWidth={2.5} /> Translation
+          </button>
+        </nav>
+
+        {/* Right Actions */}
         <div className="flex items-center gap-3">
-          <div className="flex bg-zinc-100 p-1 rounded-xl gap-1 shadow-inner">
-            <button
-              onClick={() => setMode("NOTEBOOK")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                mode === "NOTEBOOK"
-                  ? "bg-white shadow-sm text-zinc-900"
-                  : "text-zinc-400 hover:text-zinc-600"
-              }`}
-            >
-              <Type size={14} /> Notebook
-            </button>
-            <button
-              onClick={() => setMode("TRANSLATION")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                mode === "TRANSLATION"
-                  ? "bg-white shadow-sm text-zinc-900"
-                  : "text-zinc-400 hover:text-zinc-600"
-              }`}
-            >
-              <LayoutGrid size={14} /> Translation
-            </button>
-          </div>
           <button
             onClick={() => setIsPublic(!isPublic)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+            className={cn(
+              "flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all active:scale-95",
               isPublic
-                ? "border-green-200 bg-green-50 text-green-700"
-                : "border-zinc-200 text-zinc-500 hover:border-zinc-300"
-            }`}
+                ? "border-blue-100 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900/30"
+                : "border-[var(--border-subtle)] text-[var(--ink-muted)] hover:bg-[var(--surface-hover)]"
+            )}
           >
-            {isPublic ? <Globe size={14} /> : <Lock size={14} />}{" "}
+            {isPublic ? (
+              <Globe size={14} strokeWidth={2.5} />
+            ) : (
+              <Lock size={14} strokeWidth={2.5} />
+            )}
             {isPublic ? "Public" : "Private"}
           </button>
-          <button className="p-2 text-zinc-400 hover:text-zinc-900 transition-all">
-            <Share2 size={18} />
+
+          <div className="h-4 w-px bg-[var(--border-subtle)] mx-1" />
+
+          <button className="p-2 text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--surface-hover)] rounded-full transition-all">
+            <Share2 size={18} strokeWidth={2} />
+          </button>
+          <button className="p-2 text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--surface-hover)] rounded-full transition-all">
+            <MoreVertical size={18} strokeWidth={2} />
           </button>
         </div>
       </header>
@@ -179,7 +207,7 @@ export default function StudioPage() {
       {/* 2. Main Studio Body */}
       <main className="flex-grow flex overflow-hidden">
         <WorkspaceSidebar />
-        <div className="flex-grow overflow-y-auto relative bg-paper custom-scrollbar">
+        <div className="flex-grow overflow-y-auto relative bg-[var(--paper)] custom-scrollbar">
           {mode === "NOTEBOOK" ? (
             <NotebookCanvas content={content} onChange={handleContentChange} />
           ) : (
@@ -193,17 +221,26 @@ export default function StudioPage() {
         </div>
       </main>
 
-      {/* 3. Status Bar */}
-      <footer className="h-10 border-t border-zinc-200 bg-white flex items-center justify-between px-6 shrink-0 z-30">
-        <div className="flex items-center gap-6 text-[9px] font-black text-zinc-400 uppercase tracking-widest">
+      {/* 3. Status Bar: Minimal Metadata */}
+      <footer className="h-9 border-t border-[var(--border-subtle)] bg-[var(--paper)] flex items-center justify-between px-6 shrink-0 z-30">
+        <div className="flex items-center gap-8 text-[9px] font-bold text-[var(--ink-muted)] uppercase tracking-[0.2em]">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            <span>Layer: {mode}</span>
+            <div
+              className={cn(
+                "w-1.5 h-1.5 rounded-full shadow-sm",
+                mode === "NOTEBOOK" ? "bg-blue-500" : "bg-emerald-500"
+              )}
+            />
+            <span>Workspace: {mode}</span>
           </div>
-          <span>Words: {wordCount}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--ink)]">{wordCount}</span>
+            <span>Words Logged</span>
+          </div>
         </div>
-        <button className="flex items-center gap-2 text-[9px] font-black text-zinc-400 hover:text-zinc-950 uppercase tracking-widest transition-colors">
-          <Eye size={12} /> Focus Mode
+
+        <button className="flex items-center gap-2 text-[9px] font-bold text-[var(--ink-muted)] hover:text-[var(--accent-primary)] uppercase tracking-widest transition-colors">
+          <Eye size={12} strokeWidth={2.5} /> Focus Studio
         </button>
       </footer>
     </div>

@@ -1,118 +1,133 @@
+"use client";
+
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
- * useZmanim Hook (v2.1)
+ * useZmanim Hook (v3.1 - Utility Export)
  * Filepath: lib/hooks/useZmanim.ts
- * Role: Logic Core Pillar - Temporal Synchronization.
- * Purpose: Fetches local halakhic times and determines the "Effective Torah Date".
- * PRD Reference: Section 1.3 (Time-Aware Study) & Section 4 (Geolocation).
- * Fix: Standardized to TanStack Query and removed unused useCallback import.
+ * Role: Provides location-aware temporal data for DrashX.
+ * logic: Database Override > Browser Geolocation > Dallas Default.
  */
 
-interface ZmanimTimes {
-  sunset: string;
-  sunrise: string;
-  [key: string]: string;
+interface LocationState {
+  lat: number;
+  lng: number;
+  city?: string;
+  zip?: string;
+  source: "database" | "browser" | "default";
 }
-
-interface HebcalResponse {
-  date: string;
-  times: ZmanimTimes;
-}
-
-export const useZmanim = () => {
-  const supabase = createClient();
-  const { user } = useAuth();
-
-  /**
-   * 1. Resolve Location (Identity-First)
-   * Fetches lat/lng from user_settings or defaults to a scholarly standard (Jerusalem).
-   */
-  const { data: location } = useQuery({
-    queryKey: ["user-location", user?.id],
-    queryFn: async () => {
-      if (!user) return { lat: 31.7683, lng: 35.2137 }; // Default: Jerusalem
-
-      const { data } = await supabase
-        .from("user_settings")
-        .select("latitude, longitude")
-        .eq("user_id", user.id)
-        .single();
-
-      if (data?.latitude && data?.longitude) {
-        return { lat: data.latitude, lng: data.longitude };
-      }
-
-      // Fallback: Browser Geolocation (One-time permission)
-      return new Promise<{ lat: number; lng: number }>((resolve) => {
-        if (typeof window === "undefined" || !navigator.geolocation) {
-          return resolve({ lat: 31.7683, lng: 35.2137 });
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-          () => resolve({ lat: 31.7683, lng: 35.2137 })
-        );
-      });
-    },
-    staleTime: Infinity,
-  });
-
-  /**
-   * 2. Fetch Zmanim (The Temporal Pulse)
-   */
-  const zmanimQuery = useQuery({
-    queryKey: ["zmanim", location?.lat, location?.lng],
-    enabled: !!location,
-    queryFn: async (): Promise<HebcalResponse> => {
-      const resp = await fetch(
-        `https://www.hebcal.com/zmanim?cfg=json&latitude=${location?.lat}&longitude=${location?.lng}&date=now`
-      );
-      if (!resp.ok) throw new Error("Hebcal archives unreachable.");
-      return resp.json();
-    },
-    staleTime: 1000 * 60 * 30, // 30-minute temporal cache
-  });
-
-  /**
-   * 3. Logic Layer: Effective Date Calculation
-   * PRD 1.3: The Jewish day begins at sunset.
-   */
-  const temporalContext = useMemo(() => {
-    const now = new Date();
-    if (!zmanimQuery.data) return { isAfterSunset: false, effectiveDate: now };
-
-    const sunset = new Date(zmanimQuery.data.times.sunset);
-    const isAfterSunset = now > sunset;
-    const effectiveDate = new Date(now);
-
-    if (isAfterSunset) {
-      effectiveDate.setDate(effectiveDate.getDate() + 1);
-    }
-
-    return {
-      isAfterSunset,
-      effectiveDate,
-      sunset,
-      sunrise: new Date(zmanimQuery.data.times.sunrise),
-    };
-  }, [zmanimQuery.data]);
-
-  return {
-    ...temporalContext,
-    loading: zmanimQuery.isLoading,
-    error: zmanimQuery.error,
-    location,
-  };
-};
 
 /**
  * formatEffectiveDate
- * Role: Maps Date objects to the standard YYYY-MM-DD format for database keys.
+ * Utility to standardize date strings for API consumption (Hebcal/Sefaria).
  */
-export const formatEffectiveDate = (date: Date): string => {
+export const formatEffectiveDate = (date: Date) => {
   return date.toISOString().split("T")[0];
 };
+
+export function useZmanim() {
+  const { user } = useAuth();
+  const supabase = createClient();
+
+  const [location, setLocation] = useState<LocationState>({
+    lat: 32.7767,
+    lng: -96.797,
+    city: "Dallas",
+    source: "default",
+  });
+
+  const [effectiveDate, setEffectiveDate] = useState(new Date());
+  const [isAfterSunset, setIsAfterSunset] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // 1. Resolve Location (Waterfall Logic)
+  const resolveLocation = useCallback(async () => {
+    setLoading(true);
+
+    // Step A: Check Database for User Override
+    if (user) {
+      const { data } = await supabase
+        .from("user_settings")
+        .select("lat, lng, city_name, zip_code")
+        .eq("user_id", user.id)
+        .single();
+
+      if (data?.lat && data?.lng) {
+        setLocation({
+          lat: Number(data.lat),
+          lng: Number(data.lng),
+          city: data.city_name || undefined,
+          zip: data.zip_code || undefined,
+          source: "database",
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Step B: Fallback to Browser Geolocation
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            source: "browser",
+          });
+          setLoading(false);
+        },
+        () => {
+          // Final Fallback: Dallas (already set in state)
+          setLoading(false);
+        }
+      );
+    } else {
+      setLoading(false);
+    }
+  }, [user, supabase]);
+
+  useEffect(() => {
+    resolveLocation();
+  }, [resolveLocation]);
+
+  // 2. Temporal Logic (Check for Sunset)
+  useEffect(() => {
+    async function checkTemporalShift() {
+      try {
+        const res = await fetch(
+          `https://api.sunrise-sunset.org/json?lat=${location.lat}&lng=${location.lng}&formatted=0`
+        );
+        const json = await res.json();
+        if (json.status === "OK") {
+          const sunsetTime = new Date(json.results.sunset);
+          const now = new Date();
+          const shifted = now > sunsetTime;
+          setIsAfterSunset(shifted);
+
+          if (shifted) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            setEffectiveDate(tomorrow);
+          } else {
+            setEffectiveDate(now);
+          }
+        }
+      } catch (err) {
+        console.error("Temporal shift check failed", err);
+      }
+    }
+    checkTemporalShift();
+  }, [location]);
+
+  return {
+    location,
+    effectiveDate,
+    isAfterSunset,
+    loading,
+    sunrise: new Date(), // Placeholder for full implementation
+    sunset: new Date(), // Placeholder for full implementation
+    refresh: resolveLocation,
+  };
+}

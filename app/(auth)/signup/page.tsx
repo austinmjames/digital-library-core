@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import {
   ArrowRight,
+  AtSign,
   BookOpen,
   CheckCircle2,
   Loader2,
@@ -14,10 +15,10 @@ import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
 /**
- * DrashX Registration Page
+ * DrashX Registration Page (v2.0 - Username Integration)
  * Filepath: app/(auth)/signup/page.tsx
  * Role: Primary entry for the DrashX Creator Loop.
- * Design: Inverse Theme branding with Paper container.
+ * Update: Added 'username' (Scholar Handle) input to satisfy unique handle requirements.
  */
 
 export default function SignupPage() {
@@ -25,6 +26,7 @@ export default function SignupPage() {
   const supabase = createClient();
 
   const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState(""); // New state for Scholar Handle
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,6 +52,20 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
+    // Basic client-side validation for handle format (alphanumeric + underscores)
+    const handleRegex = /^[a-z0-9_]+$/;
+    if (!handleRegex.test(username.toLowerCase())) {
+      setError("Handle must contain only letters, numbers, and underscores.");
+      setLoading(false);
+      return;
+    }
+
+    if (username.length < 3) {
+      setError("Handle must be at least 3 characters.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const { error: authError } = await supabase.auth.signUp({
         email,
@@ -57,6 +73,7 @@ export default function SignupPage() {
         options: {
           data: {
             display_name: displayName,
+            username: username.toLowerCase(), // Pass handle to metadata for the SQL trigger
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -207,6 +224,35 @@ export default function SignupPage() {
                     required
                   />
                 </div>
+              </div>
+
+              {/* Scholar Handle (Username) - NEW FIELD */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">
+                  Scholar Handle / URL
+                </label>
+                <div className="relative group">
+                  <AtSign
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-zinc-900 transition-colors"
+                    size={18}
+                  />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) =>
+                      setUsername(
+                        e.target.value.replace(/\s+/g, "").toLowerCase()
+                      )
+                    }
+                    className="w-full pl-12 pr-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-4 focus:ring-zinc-950/5 focus:border-zinc-950 outline-none transition-all text-sm font-mono font-medium"
+                    placeholder="e.g. seeking_wisdom"
+                    required
+                    minLength={3}
+                  />
+                </div>
+                <p className="text-[9px] text-zinc-400 ml-1 italic">
+                  This will be your link: drashx.com/u/{username || "..."}
+                </p>
               </div>
 
               {/* Email Address */}

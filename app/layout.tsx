@@ -7,10 +7,10 @@ import { Inter, Noto_Serif_Hebrew } from "next/font/google";
 import "./globals.css";
 
 /**
- * Root Layout (DrashX v2.0)
+ * Root Layout (DrashX v2.1 - Material Edition)
  * Filepath: app/layout.tsx
  * Role: Global shell and provider orchestrator.
- * PRD Alignment: Section 2.1 (Identity), 4.1 (Aesthetics).
+ * Style: Modern Google (Material 3). Clean typography, dynamic theme variables.
  */
 
 const notoSerifHebrew = Noto_Serif_Hebrew({
@@ -28,11 +28,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "DrashX | The Digital Beit Midrash",
+    default: "DrashX | Digital Beit Midrash",
     template: "%s | DrashX",
   },
   description:
-    "High-performance interface for Jewish text study and community scholarship.",
+    "High-performance interface for canonical study and communal scholarship.",
 };
 
 export default async function RootLayout({
@@ -46,25 +46,26 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${notoSerifHebrew.variable} ${inter.variable} paper`}
+      className={`${notoSerifHebrew.variable} ${inter.variable}`}
+      suppressHydrationWarning
     >
-      <body className="font-sans antialiased bg-paper text-ink selection:bg-zinc-950 selection:text-white">
-        {/* Universal Background Texture (Defined in Canvas) */}
-        <div className="paper-texture" />
-
+      <body className="font-sans antialiased bg-[var(--paper)] text-[var(--ink)] transition-colors duration-300">
+        {/* Providers wrapper for Auth, QueryClient, and Theme context.
+            SideNav utilizes the Zinc-950 Inverse Theme for high-contrast navigation.
+        */}
         <Providers>
           <div className="flex h-screen overflow-hidden relative z-10">
-            {/* Main Navigation Sidebar
-                Design: Zinc-950 Inverse Theme 
-            */}
+            {/* Main Navigation Sidebar */}
             <SideNav user={user || undefined} />
 
-            {/* Application Content Area */}
+            {/* Global Content Area with standardized scrollbar */}
             <main className="flex-1 relative overflow-y-auto custom-scrollbar">
               {children}
             </main>
           </div>
         </Providers>
+
+        {/* Global Loading / Transition Overlay could be added here if needed */}
       </body>
     </html>
   );

@@ -2,9 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 /**
- * DrashX Auth Callback Handler
- * Role: Exchanges auth code for session and handles Onboarding vs. Library redirection.
- * PRD Reference: Authentication & Onboarding (Section 2.2)
+ * Auth Callback Handler (DrashX v1.0)
+ * Filepath: app/auth/callback/route.ts
+ * Role: Exchanges verification code for session and manages onboarding redirection.
+ * PRD Reference: Section 2.2 (Authentication & Onboarding).
  */
 
 export async function GET(request: Request) {
@@ -17,17 +18,17 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      // Check for onboarding completion to satisfy PRD Onboarding Wizard requirement
+      // Fetch profile to verify onboarding completion per PRD requirements
       const { data: profile } = await supabase
         .from("users")
         .select("onboarding_complete")
         .eq("id", data.user.id)
         .single();
 
-      // If onboarding isn't complete, override 'next' to the wizard
+      // Redirect to Onboarding Wizard if profile is incomplete
       const redirectUrl = profile?.onboarding_complete ? next : "/onboarding";
 
-      // Ensure the redirect is internal to prevent open-redirect vulnerabilities
+      // Secure internal redirect
       const safeRedirect = redirectUrl.startsWith("/")
         ? `${origin}${redirectUrl}`
         : `${origin}/library`;
@@ -36,6 +37,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Fallback for failed verification
+  // Fallback for verification failures
   return NextResponse.redirect(`${origin}/auth/auth-code-error`);
 }
