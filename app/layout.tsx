@@ -1,5 +1,6 @@
 import { SideNav } from "@/components/layout/SideNav";
 import { Providers } from "@/components/providers/Providers";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { getCurrentUser } from "@/lib/data/user";
 
 import type { Metadata } from "next";
@@ -7,10 +8,11 @@ import { Inter, Noto_Serif_Hebrew } from "next/font/google";
 import "./globals.css";
 
 /**
- * Root Layout (DrashX v2.1 - Material Edition)
+ * Root Layout (DrashX v2.2 - Global Persistence Edition)
  * Filepath: app/layout.tsx
  * Role: Global shell and provider orchestrator.
  * Style: Modern Google (Material 3). Clean typography, dynamic theme variables.
+ * Fixes: Integrated ThemeProvider for cross-page persistence.
  */
 
 const notoSerifHebrew = Noto_Serif_Hebrew({
@@ -50,19 +52,20 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased bg-[var(--paper)] text-[var(--ink)] transition-colors duration-300">
-        {/* Providers wrapper for Auth, QueryClient, and Theme context.
-            SideNav utilizes the Zinc-950 Inverse Theme for high-contrast navigation.
-        */}
+        {/* Providers wrapper for Auth, QueryClient, and Theme context. */}
         <Providers>
-          <div className="flex h-screen overflow-hidden relative z-10">
-            {/* Main Navigation Sidebar */}
-            <SideNav user={user || undefined} />
+          {/* ThemeProvider synchronizes registry preferences with the DOM root. */}
+          <ThemeProvider>
+            <div className="flex h-screen overflow-hidden relative z-10">
+              {/* Main Navigation Sidebar */}
+              <SideNav user={user || undefined} />
 
-            {/* Global Content Area with standardized scrollbar */}
-            <main className="flex-1 relative overflow-y-auto custom-scrollbar">
-              {children}
-            </main>
-          </div>
+              {/* Global Content Area with standardized scrollbar */}
+              <main className="flex-1 relative overflow-y-auto custom-scrollbar">
+                {children}
+              </main>
+            </div>
+          </ThemeProvider>
         </Providers>
 
         {/* Global Loading / Transition Overlay could be added here if needed */}
